@@ -120,7 +120,8 @@ static void at_exit() {
 
 static void usage(u8 *argv0, int more_help) {
 
-  SAYF(
+  SAYF("\nPisquo's fork of afl++\n\n"
+
       "\n%s [ options ] -- /path/to/fuzzed_app [ ... ]\n\n"
 
       "Required parameters:\n"
