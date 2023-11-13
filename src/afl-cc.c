@@ -47,9 +47,27 @@
   #define LLVM_MINOR 0
 #endif
 
+<<<<<<< HEAD
 #ifndef MAX_PARAMS_NUM
   #define MAX_PARAMS_NUM 2048
 #endif
+=======
+static u8  *obj_path;  
+static u8 **cc_params;                 /* Parameters passed to the real CC  */
+static u32  cc_par_cnt = 1;            /* Param count, including argv0      */
+static u8   clang_mode;                /* Invoked as afl-clang*?            */
+static u8   llvm_fullpath[PATH_MAX];
+static u8   instrument_mode, instrument_opt_mode, ngram_size, ctx_k, lto_mode;
+static u8   compiler_mode, plusplus_mode, have_instr_env = 0, need_aflpplib = 0;
+static u8   have_gcc, have_llvm, have_gcc_plugin, have_lto, have_instr_list = 0;
+static u8  *lto_flag = AFL_CLANG_FLTO, *argvnull;
+static u8   debug;
+static u8   cwd[4096];
+static u8   cmplog_mode;
+u8          use_stdin;                                             /* dummy */
+static int  passthrough;
+// static u8 *march_opt = CFLAGS_OPT;
+>>>>>>> 490f3f94 (Added instrumentation for branch complexity)
 
 /* Global declarations */
 
@@ -2995,6 +3013,60 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
     if (aflcc->lto_mode && aflcc->have_instr_env) {
 
       load_llvm_pass(aflcc, "afl-llvm-lto-instrumentlist.so");
+      cc_params[cc_par_cnt++] = "-no-integrated-as";
+
+    }
+
+  }
+
+  if (compiler_mode == GCC_PLUGIN) {
+
+    char *fplugin_arg;
+
+    if (cmplog_mode) {
+
+      fplugin_arg =
+          alloc_printf("-fplugin=%s/afl-gcc-cmplog-pass.so", obj_path);
+      cc_params[cc_par_cnt++] = fplugin_arg;
+      fplugin_arg =
+          alloc_printf("-fplugin=%s/afl-gcc-cmptrs-pass.so", obj_path);
+      cc_params[cc_par_cnt++] = fplugin_arg;
+
+    }
+
+    fplugin_arg = alloc_printf("-fplugin=%s/afl-gcc-pass.so", obj_path);
+    cc_params[cc_par_cnt++] = fplugin_arg;
+    cc_params[cc_par_cnt++] = "-fno-if-conversion";
+    cc_params[cc_par_cnt++] = "-fno-if-conversion2";
+
+  }
+
+  if (compiler_mode == LLVM || compiler_mode == LTO) {
+
+    cc_params[cc_par_cnt++] = "-Wno-unused-command-line-argument";
+
+    #if LLVM_MAJOR < 16
+      cc_params[cc_par_cnt++] = "-fexperimental-new-pass-manager";
+    #endif
+
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-branch-complexity-pass.so", obj_path);
+
+    if (lto_mode && have_instr_env) {
+
+#if LLVM_MAJOR >= 11                                /* use new pass manager */
+  #if LLVM_MAJOR < 16
+      cc_params[cc_par_cnt++] = "-fexperimental-new-pass-manager";
+  #endif
+      cc_params[cc_par_cnt++] = alloc_printf(
+          "-fpass-plugin=%s/afl-llvm-lto-instrumentlist.so", obj_path);
+#else
+      cc_params[cc_par_cnt++] = "-Xclang";
+      cc_params[cc_par_cnt++] = "-load";
+      cc_params[cc_par_cnt++] = "-Xclang";
+      cc_params[cc_par_cnt++] =
+          alloc_printf("%s/afl-llvm-lto-instrumentlist.so", obj_path);
+#endif
 
     }
 
@@ -3061,7 +3133,67 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
 
       } else if (aflcc->instrument_mode == INSTRUMENT_LLVMNATIVE) {
 
+<<<<<<< HEAD
         add_native_pcguard(aflcc);
+=======
+        } else {
+
+    #if LLVM_MAJOR >= 13                            /* use new pass manager */
+      #if LLVM_MAJOR < 16
+          cc_params[cc_par_cnt++] = "-fexperimental-new-pass-manager";
+      #endif
+      
+
+          cc_params[cc_par_cnt++] = alloc_printf(
+              "-fpass-plugin=%s/SanitizerCoveragePCGUARD.so", obj_path);
+          
+          
+    #else
+          cc_params[cc_par_cnt++] = "-Xclang";
+          cc_params[cc_par_cnt++] = "-load";
+          cc_params[cc_par_cnt++] = "-Xclang";
+          cc_params[cc_par_cnt++] =
+              alloc_printf("%s/SanitizerCoveragePCGUARD.so", obj_path);
+    #endif
+
+        }
+
+  #endif
+#else
+  #if LLVM_MAJOR >= 4
+        if (!be_quiet)
+          SAYF(
+              "Using unoptimized trace-pc-guard, upgrade to LLVM 13+ for "
+              "enhanced version.\n");
+        cc_params[cc_par_cnt++] = "-fsanitize-coverage=trace-pc-guard";
+        instrument_mode = INSTRUMENT_LLVMNATIVE;
+  #else
+        FATAL("pcguard instrumentation requires LLVM 4.0.1+");
+  #endif
+#endif
+
+      } else if (instrument_mode == INSTRUMENT_LLVMNATIVE) {
+
+#if LLVM_MAJOR >= 4
+        if (instrument_opt_mode & INSTRUMENT_OPT_CODECOV) {
+
+  #if LLVM_MAJOR >= 6
+          cc_params[cc_par_cnt++] =
+              "-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table";
+  #else
+          FATAL("pcguard instrumentation with pc-table requires LLVM 6.0.1+");
+  #endif
+
+        } else {
+
+          cc_params[cc_par_cnt++] = "-fsanitize-coverage=trace-pc-guard";
+
+        }
+
+#else
+        FATAL("pcguard instrumentation requires LLVM 4.0.1+");
+#endif
+>>>>>>> 490f3f94 (Added instrumentation for branch complexity)
 
       } else {
 
