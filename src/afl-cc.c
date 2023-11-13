@@ -47,7 +47,7 @@
   #define LLVM_MINOR 0
 #endif
 
-static u8  *obj_path;                  /* Path to runtime libraries         */
+static u8  *obj_path;  
 static u8 **cc_params;                 /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;            /* Param count, including argv0      */
 static u8   clang_mode;                /* Invoked as afl-clang*?            */
@@ -815,6 +815,13 @@ static void edit_params(u32 argc, char **argv, char **envp) {
 
     cc_params[cc_par_cnt++] = "-Wno-unused-command-line-argument";
 
+    #if LLVM_MAJOR < 16
+      cc_params[cc_par_cnt++] = "-fexperimental-new-pass-manager";
+    #endif
+
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-branch-complexity-pass.so", obj_path);
+
     if (lto_mode && have_instr_env) {
 
 #if LLVM_MAJOR >= 11                                /* use new pass manager */
@@ -1026,8 +1033,12 @@ static void edit_params(u32 argc, char **argv, char **envp) {
       #if LLVM_MAJOR < 16
           cc_params[cc_par_cnt++] = "-fexperimental-new-pass-manager";
       #endif
+      
+
           cc_params[cc_par_cnt++] = alloc_printf(
               "-fpass-plugin=%s/SanitizerCoveragePCGUARD.so", obj_path);
+          
+          
     #else
           cc_params[cc_par_cnt++] = "-Xclang";
           cc_params[cc_par_cnt++] = "-load";
