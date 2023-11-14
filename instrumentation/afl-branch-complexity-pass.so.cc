@@ -37,7 +37,6 @@ class BranchComplexityPass : public PassInfoMixin<BranchComplexityPass> {
 
 PreservedAnalyses instrument_line(Module &M, std::string line){
   for(Function &F : M.getFunctionList()) {
-      errs() << "In function " << F.getName() << "\n";
       for(BasicBlock &BB : F.getBasicBlockList()) {
         for (Instruction &inst : BB.getInstList()){
           bool build = false;
@@ -46,12 +45,12 @@ PreservedAnalyses instrument_line(Module &M, std::string line){
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
             
-            errs() << inst << " " + loc_s << "\n";
-
             if(loc_s.find(line) == std::string::npos)
               continue;
-
+            
             if(!build){
+              errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding instumentation\n";
+
               IRBuilder<> assertBuilder(&inst);
               FunctionCallee fn = M.getOrInsertFunction("abort",
                                                     FunctionType::getVoidTy(M.getContext()));
