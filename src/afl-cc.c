@@ -487,7 +487,7 @@ static void process_params(u32 argc, char **argv) {
                         strlen("sanitize-coverage-allow")) &&
                 strncmp(cur, "sanitize-coverage-deny",
                         strlen("sanitize-coverage-deny")) &&
-                instrument_mode != INSTRUMENT_LLVMNATIVE)) {
+                instrument_mode != INSTRUMENT_LLVMNATIVE && instrument_mode != INSTRUMENT_CLASSIC)) {
 
       if (!be_quiet) { WARNF("Found '%s' - stripping!", cur); }
       continue;
@@ -821,6 +821,8 @@ static void edit_params(u32 argc, char **argv, char **envp) {
 
     cc_params[cc_par_cnt++] =
             alloc_printf("-fpass-plugin=%s/afl-branch-complexity-pass.so", obj_path);
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-path-collection-pass.so", obj_path);
 
     if (lto_mode && have_instr_env) {
 

@@ -13,6 +13,7 @@
 
 
 */
+#define CUSTOM_TRACE 1
 
 #ifdef __AFL_CODE_COVERAGE
   #ifndef _GNU_SOURCE
@@ -1535,6 +1536,8 @@ __attribute__((constructor(0))) void __afl_auto_first(void) {
    The first function (__sanitizer_cov_trace_pc_guard) is called back on every
    edge (as opposed to every basic block). */
 
+
+#ifndef CUSTOM_TRACE
 void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
 
   // For stability analysis, if you want to know to which function unstable
@@ -1582,6 +1585,7 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
 #endif
 
 }
+#endif
 
 #ifdef __AFL_CODE_COVERAGE
 void __sanitizer_cov_pcs_init(const uintptr_t *pcs_beg,
@@ -1683,6 +1687,7 @@ void __sanitizer_cov_pcs_init(const uintptr_t *pcs_beg,
    ID of 0 as a special value to indicate non-instrumented bits. That may
    still touch the bitmap, but in a fairly harmless way. */
 
+#ifndef CUSTOM_TRACE
 void __sanitizer_cov_trace_pc_guard_init(uint32_t *start, uint32_t *stop) {
 
   u32   inst_ratio = 100;
@@ -1898,7 +1903,7 @@ void __sanitizer_cov_trace_pc_guard_init(uint32_t *start, uint32_t *stop) {
   }
 
 }
-
+#endif
 ///// CmpLog instrumentation
 
 void __cmplog_ins_hook1(uint8_t arg1, uint8_t arg2, uint8_t attr) {
