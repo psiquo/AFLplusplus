@@ -95,7 +95,7 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
   char digest[MD5_DIGEST_LENGTH];
   int base = strlen("./inputs/");
   char outfile_i[ base + strlen("_input") + 2 * MD5_DIGEST_LENGTH + 1];
-  char outfile_t[strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
+  char outfile_t[ base + strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
 
   memset(outfile_i,0,sizeof outfile_i);
   memset(outfile_t,0,sizeof outfile_t);
