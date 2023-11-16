@@ -2851,6 +2851,128 @@ static void process_params(aflcc_state_t *aflcc, u8 scan, u32 argc,
     if (PARAM_MISS != parse_linking_params(aflcc, cur, scan, &skip_next, argv))
       continue;
 
+<<<<<<< HEAD
+=======
+    }
+
+    if (compiler_mode == GCC_PLUGIN && !strcmp(cur, "-pipe")) { continue; }
+
+    if (!strcmp(cur, "-z") || !strcmp(cur, "-Wl,-z")) {
+
+      u8 *param = *(argv + 1);
+      if (!strcmp(param, "defs") || !strcmp(param, "-Wl,defs")) {
+
+        skip_next = 1;
+        continue;
+
+      }
+
+    }
+
+    if ((compiler_mode == GCC || compiler_mode == GCC_PLUGIN) &&
+        !strncmp(cur, "-stdlib=", 8)) {
+
+      if (!be_quiet) { WARNF("Found '%s' - stripping!", cur); }
+      continue;
+
+    }
+
+    if (!strncmp(cur, "-fsanitize-coverage-", 20) && strstr(cur, "list=")) {
+
+      have_instr_list = 1;
+
+    }
+
+    if (!strncmp(cur, "-fsanitize=", strlen("-fsanitize=")) &&
+        strchr(cur, ',')) {
+
+      parse_fsanitize(cur);
+      if (!cur || strlen(cur) <= strlen("-fsanitize=")) { continue; }
+
+    } else if ((!strncmp(cur, "-fsanitize=fuzzer-",
+
+                         strlen("-fsanitize=fuzzer-")) ||
+                !strncmp(cur, "-fsanitize-coverage",
+                         strlen("-fsanitize-coverage"))) &&
+               (strncmp(cur, "sanitize-coverage-allow",
+                        strlen("sanitize-coverage-allow")) &&
+                strncmp(cur, "sanitize-coverage-deny",
+                        strlen("sanitize-coverage-deny")) &&
+                instrument_mode != INSTRUMENT_LLVMNATIVE && instrument_mode != INSTRUMENT_CLASSIC)) {
+
+      if (!be_quiet) { WARNF("Found '%s' - stripping!", cur); }
+      continue;
+
+    }
+
+    if (need_aflpplib || !strcmp(cur, "-fsanitize=fuzzer")) {
+
+      u8 *afllib = find_object("libAFLDriver.a", argv[0]);
+
+      if (!be_quiet) {
+
+        OKF("Found '-fsanitize=fuzzer', replacing with libAFLDriver.a");
+
+      }
+
+      if (!afllib) {
+
+        if (!be_quiet) {
+
+          WARNF(
+              "Cannot find 'libAFLDriver.a' to replace '-fsanitize=fuzzer' in "
+              "the flags - this will fail!");
+
+        }
+
+      } else {
+
+        cc_params[cc_par_cnt++] = afllib;
+
+#ifdef __APPLE__
+        cc_params[cc_par_cnt++] = "-undefined";
+        cc_params[cc_par_cnt++] = "dynamic_lookup";
+#endif
+
+      }
+
+      if (need_aflpplib) {
+
+        need_aflpplib = 0;
+
+      } else {
+
+        continue;
+
+      }
+
+    }
+
+    if (!strcmp(cur, "-m32")) bit_mode = 32;
+    if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
+    if (!strcmp(cur, "-m64")) bit_mode = 64;
+
+    if (!strcmp(cur, "-fsanitize=address") || !strcmp(cur, "-fsanitize=memory"))
+      asan_set = 1;
+
+    if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
+
+    if (!strcmp(cur, "-x")) x_set = 1;
+    if (!strcmp(cur, "-E")) preprocessor_only = 1;
+    if (!strcmp(cur, "-shared")) shared_linking = 1;
+    if (!strcmp(cur, "-dynamiclib")) shared_linking = 1;
+    if (!strcmp(cur, "--target=wasm32-wasi")) passthrough = 1;
+    if (!strcmp(cur, "-Wl,-r")) partial_linking = 1;
+    if (!strcmp(cur, "-Wl,-i")) partial_linking = 1;
+    if (!strcmp(cur, "-Wl,--relocatable")) partial_linking = 1;
+    if (!strcmp(cur, "-r")) partial_linking = 1;
+    if (!strcmp(cur, "--relocatable")) partial_linking = 1;
+    if (!strcmp(cur, "-c")) have_c = 1;
+
+    if (!strncmp(cur, "-O", 2)) have_o = 1;
+    if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
+
+>>>>>>> 46c9deda (Aggiunta instrumentazione per libwebp analysis)
     if (*cur == '@') {
 
       // response file support.
@@ -3051,6 +3173,8 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
 
     cc_params[cc_par_cnt++] =
             alloc_printf("-fpass-plugin=%s/afl-branch-complexity-pass.so", obj_path);
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-path-collection-pass.so", obj_path);
 
     if (lto_mode && have_instr_env) {
 
@@ -3133,9 +3257,7 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
 
       } else if (aflcc->instrument_mode == INSTRUMENT_LLVMNATIVE) {
 
-<<<<<<< HEAD
         add_native_pcguard(aflcc);
-=======
         } else {
 
     #if LLVM_MAJOR >= 13                            /* use new pass manager */
@@ -3193,7 +3315,6 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
 #else
         FATAL("pcguard instrumentation requires LLVM 4.0.1+");
 #endif
->>>>>>> 490f3f94 (Added instrumentation for branch complexity)
 
       } else {
 
