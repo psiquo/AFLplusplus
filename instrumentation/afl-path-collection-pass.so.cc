@@ -28,16 +28,16 @@ using namespace llvm;
 
 namespace {
 
-class BranchComplexityPass : public PassInfoMixin<BranchComplexityPass> {
+class PathCollection : public PassInfoMixin<PathCollection> {
   public:
     PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
     static bool isRequired() {return true;} 
   };
 }
 
-PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
+PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
+  bool build = false;
   for(Function &F : M.getFunctionList()) {
-      bool build = false;
       for(BasicBlock &BB : F.getBasicBlockList()) {
         for (Instruction &inst : BB.getInstList()){
           if(DILocation *Loc = inst.getDebugLoc().get()){
@@ -52,7 +52,7 @@ PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line)
               errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding instumentation\n";
 
               IRBuilder<> assertBuilder(&inst);
-              FunctionCallee fn = M.getOrInsertFunction("abort",
+              FunctionCallee fn = M.getOrInsertFunction("__dump_path_collection",
                                                     FunctionType::getVoidTy(M.getContext()));
               assertBuilder.CreateCall(fn,ArrayRef<Value *>({}));
               build = true;
@@ -67,7 +67,7 @@ PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line)
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {
 
-  return {LLVM_PLUGIN_API_VERSION, "BranchComplexityPass", "v0.1",
+  return {LLVM_PLUGIN_API_VERSION, "PathCollection", "v0.1",
           /* lambda to insert our pass into the pass pipeline. */
           [](PassBuilder &PB) {
 
@@ -81,7 +81,7 @@ llvmGetPassPluginInfo() {
 #endif
                 [](ModulePassManager &MPM, OptimizationLevel OL) {
 
-                  MPM.addPass(BranchComplexityPass());
+                  MPM.addPass(PathCollection());
 
                 });
 
@@ -89,49 +89,13 @@ llvmGetPassPluginInfo() {
 
 }
 
-PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MAM) {
-    char *issue = getenv("OSS_FUZZ_ISSUE");
-    char *file_url = getenv("OSS_FUZZ_URL");
-    char *enable = getenv("OSS_FUZZ_BRANCH_COMPLEXITY");
+PreservedAnalyses PathCollection::run(Module &M, ModuleAnalysisManager &MAM) {
+    char *instr_line = getenv("AFL_CODE_DUMP");
 
-    if (enable == NULL){
+    if (instr_line == NULL){
         return PreservedAnalyses::all();
     }
 
-    std::ifstream instrFile;
-
-    instrFile.open("instr_list.txt", std::ios::in);
-
-    if(issue == NULL || (file_url == NULL && ! instrFile.is_open())){
-      errs() << "Insufficient information given for the instrumentation\n";
-      return PreservedAnalyses::all();
-    }
-
-
-    if(!instrFile.is_open()){
-
-      pid_t pid = fork();
-
-      if(pid != 0){
-        waitpid(pid,NULL,0);
-      } else {
-        execl("/usr/bin/curl","curl","-o","instr_list.txt",file_url,NULL);
-      } 
-
-      instrFile.open("instr_list.txt", std::ios::in);
-    }
-    
-    std::string line;
-    PreservedAnalyses ret;
-    while(std::getline(instrFile,line)) {
-      if(line.rfind(issue,0) == 0){
-        std::string instr_line = line.substr(line.find(" ") + 1);
-        instr_line.erase(instr_line.find_last_not_of("\n"));
-        ret = branch_complexity_instrument_line(M,instr_line);
-      }
-    }
-
-    instrFile.close();
-    return ret;
+    return path_collection_instrument_line(M,instr_line);
 }
 

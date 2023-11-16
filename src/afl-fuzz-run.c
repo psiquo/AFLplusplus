@@ -38,8 +38,31 @@
 u64 time_spent_working = 0;
 #endif
 
+#define DAVIDE_CUSTOM_TRACE
+
+#ifdef DAVIDE_CUSTOM_TRACE
+#include <openssl/md5.h>
+#include <unistd.h>
+#endif
 /* Execute target application, monitoring for timeouts. Return status
    information. The called program will update afl->fsrv->trace_bits. */
+
+inline void copy_file(char * source,  char * dest){
+  
+  unsigned char buf[4096] = {};
+  size_t bytes;
+
+  FILE *sf,*df;
+  sf = fopen(source,"rb");
+  df = fopen(dest,"wb");
+
+  while((bytes = fread(buf,sizeof *buf, 1024,sf)) > 0){
+    fwrite(buf,sizeof *buf, bytes,df);
+  }
+  
+  fclose(sf);
+  fclose(df);
+}
 
 fsrv_run_result_t __attribute__((hot))
 fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
@@ -59,6 +82,53 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 #endif
 
   fsrv_run_result_t res = afl_fsrv_run_target(fsrv, timeout, &afl->stop_soon);
+
+  #ifdef DAVIDE_CUSTOM_TRACE
+  
+  
+  if(stat("./inputs",NULL) == -1){
+    mkdir("./inputs",0777);
+  }
+
+  MD5_CTX c;
+  char buf[512];
+  char digest[MD5_DIGEST_LENGTH];
+  int base = strlen("./inputs/");
+  char outfile_i[ base + strlen("_input") + 2 * MD5_DIGEST_LENGTH + 1];
+  char outfile_t[ base + strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
+
+  memset(outfile_i,0,sizeof outfile_i);
+  memset(outfile_t,0,sizeof outfile_t);
+
+  ssize_t bytes;
+  FILE* f = fopen(afl->fsrv.out_file,"rb");
+
+  MD5_Init(&c);
+  bytes = fread(buf, sizeof *buf,512,f);
+
+  do {
+    MD5_Update(&c,buf,bytes);
+  } while((bytes = fread(buf, sizeof *buf,512,f)) > 0);
+
+  MD5_Final(digest,&c);
+  
+  fclose(f);
+  sprintf(outfile_i,"./inputs/");
+  sprintf(outfile_t,"./inputs/");
+
+ 
+  for(int i = 0; i < MD5_DIGEST_LENGTH; i++ ){
+    sprintf(outfile_i + base + (2 *i),"%02x",digest[i]);
+    sprintf(outfile_t + base + (2 *i),"%02x",digest[i]);
+  }
+
+  sprintf(outfile_i + base + 2 * MD5_DIGEST_LENGTH,"_input");
+  sprintf(outfile_t + base + 2 * MD5_DIGEST_LENGTH,"_trace");
+
+  copy_file(afl->fsrv.out_file,outfile_i);
+  copy_file("/tmp/cur_trace",outfile_t);
+
+  #endif
 
 #ifdef PROFILING
   clock_gettime(CLOCK_REALTIME, &spec);
