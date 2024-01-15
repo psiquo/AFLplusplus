@@ -18,12 +18,12 @@ ifneq "" "$(LLVM_BINDIR)"
   endif
 endif
 
-CFLAGS := -O3 -funroll-loops -g -fPIC
+CFLAGS := -O3 -funroll-loops -g -fPIC -lssl -lcrypto
 
 all:	libAFLDriver.a libAFLQemuDriver.a aflpp_qemu_driver_hook.so
 
 aflpp_driver.o:	aflpp_driver.c
-	-$(CC) -I. -I../../include $(CFLAGS) -c aflpp_driver.c
+	-$(CXX) -I. -I../../include $(CFLAGS) -c aflpp_driver.c
 
 libAFLDriver.a:	aflpp_driver.o
 	@ar rc libAFLDriver.a aflpp_driver.o

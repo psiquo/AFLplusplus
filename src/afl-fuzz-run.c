@@ -39,6 +39,8 @@ u64 time_spent_working = 0;
 #endif
 
 #define DAVIDE_CUSTOM_TRACE
+#define DAVIDE_SAVE_FIRST_CRASH
+#define DAVIDE_PATH_COV
 
 #ifdef DAVIDE_CUSTOM_TRACE
 #include <openssl/md5.h>
@@ -46,6 +48,10 @@ u64 time_spent_working = 0;
 #endif
 /* Execute target application, monitoring for timeouts. Return status
    information. The called program will update afl->fsrv->trace_bits. */
+
+#ifdef DAVIDE_CUSTOM_TRACE
+
+char *filename = NULL;
 
 inline void copy_file(char * source,  char * dest){
   
@@ -63,6 +69,7 @@ inline void copy_file(char * source,  char * dest){
   fclose(sf);
   fclose(df);
 }
+#endif
 
 fsrv_run_result_t __attribute__((hot))
 fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
@@ -81,24 +88,84 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 
 #endif
 
+#ifdef DAVIDE_SAVE_FIRST_CRASH
+  static u64 beginning = 0;
+  struct timespec spec2;
+
+  if(!beginning){
+    clock_gettime(CLOCK_REALTIME, &spec2);
+    beginning = (spec2.tv_sec * 1000000000) + spec2.tv_nsec;
+  }
+
+#endif
+
+
   fsrv_run_result_t res = afl_fsrv_run_target(fsrv, timeout, &afl->stop_soon);
 
+  #ifdef DAVIDE_SAVE_FIRST_CRASH
+  static u8 crashed = 0;
+  
+  if(getenv("AFL_SAVE_FIRST_CRASH") && !crashed && res == FSRV_RUN_CRASH){
+    printf("SAVING CRASH\n");
+    crashed = 1;
+
+    u64 current, elapsed;
+    clock_gettime(CLOCK_REALTIME, &spec2);
+    current = (spec2.tv_sec * 1000000000) + spec2.tv_nsec;
+    elapsed = (current - beginning);
+
+    u8  fn[PATH_MAX];
+
+    snprintf(fn,PATH_MAX,"%s/first_crash_time",afl->out_dir);
+    FILE *elapsed_first_crash_f = fopen(fn,"w");
+
+    fprintf(elapsed_first_crash_f,"%lld",elapsed);
+  }
+  #endif
+
   #ifdef DAVIDE_CUSTOM_TRACE
+
+  if(filename == NULL){
+ 	if((filename = getenv("AFL_TRACE_FILE")) == NULL){
+		printf("Must provide tracefile location with AFL_TRACE_FILE\n");
+		exit(-1);
+	}
+  }
   
+  FILE *trace_file = fopen(filename,"r");
   
-  if(stat("./inputs",NULL) == -1){
-    mkdir("./inputs",0777);
+  if(trace_file == NULL)
+	  return res;
+
+  fclose(trace_file);
+
+  
+  char crash_dir[PATH_MAX];
+  char ncrash_dir[PATH_MAX];
+
+  sprintf(crash_dir,"%s/crash",afl->out_dir);
+  sprintf(ncrash_dir,"%s/nocrash",afl->out_dir);
+
+  if(stat(crash_dir,NULL) == -1){
+      mkdir(crash_dir,0777);
+  }
+
+  if(stat(ncrash_dir,NULL) == -1){
+      mkdir(ncrash_dir,0777);
   }
 
   MD5_CTX c;
   char buf[512];
   char digest[MD5_DIGEST_LENGTH];
-  int base = strlen("./inputs/");
-  char outfile_i[ base + strlen("_input") + 2 * MD5_DIGEST_LENGTH + 1];
-  char outfile_t[ base + strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
+  int base_size = strlen("/nocrash/") + strlen(afl->out_dir);
+  char *base = NULL;
+  char outfile_i[ base_size + strlen("_input") + 2 * MD5_DIGEST_LENGTH + 1];
+  char outfile_t[ base_size + strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
 
   memset(outfile_i,0,sizeof outfile_i);
   memset(outfile_t,0,sizeof outfile_t);
+
+
 
   ssize_t bytes;
   FILE* f = fopen(afl->fsrv.out_file,"rb");
@@ -113,20 +180,44 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
   MD5_Final(digest,&c);
   
   fclose(f);
-  sprintf(outfile_i,"./inputs/");
-  sprintf(outfile_t,"./inputs/");
+
+  if(res == FSRV_RUN_CRASH){
+    base = crash_dir;
+    base_size = strlen("/crash/") + strlen(afl->out_dir);
+  } else {
+    base = ncrash_dir;
+    base_size = strlen("/nocrash/") + strlen(afl->out_dir);
+  }
+
+  sprintf(outfile_i,"%s/",base);
+  sprintf(outfile_t,"%s/",base);
 
  
   for(int i = 0; i < MD5_DIGEST_LENGTH; i++ ){
-    sprintf(outfile_i + base + (2 *i),"%02x",digest[i]);
-    sprintf(outfile_t + base + (2 *i),"%02x",digest[i]);
+    sprintf(outfile_i + base_size + (2 *i),"%02x",digest[i]);
+    sprintf(outfile_t + base_size + (2 *i),"%02x",digest[i]);
   }
 
-  sprintf(outfile_i + base + 2 * MD5_DIGEST_LENGTH,"_input");
-  sprintf(outfile_t + base + 2 * MD5_DIGEST_LENGTH,"_trace");
+  sprintf(outfile_i + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
+  sprintf(outfile_t + base_size + 2 * MD5_DIGEST_LENGTH,"_trace");
 
   copy_file(afl->fsrv.out_file,outfile_i);
-  copy_file("/tmp/cur_trace",outfile_t);
+  copy_file(filename,outfile_t);
+
+
+  remove(filename);
+
+  #ifdef DAVIDE_PATH_COV  
+  FILE *trace_file_path = fopen(outfile_t,"r");
+
+  char byte[2];
+
+  for(int i = 0; i < 16; i++){
+    fscanf(trace_file_path,"%2hhx",&(afl->fsrv.trace_bits + afl->fsrv.map_size)[i]);
+  }
+
+  fclose(trace_file_path);
+  #endif
 
   #endif
 
@@ -747,6 +838,7 @@ void sync_fuzzers(afl_state_t *afl) {
 
   /* Look at the entries created for every other fuzzer in the sync directory.
    */
+
 
   while ((sd_ent = readdir(sd))) {
 

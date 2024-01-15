@@ -44,7 +44,9 @@ PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
 
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
-            
+    		
+            //if(!std::string(F.getName()).compare("parseCodeSection"))	    
+	          // errs() << F.getName() << ":" << inst << "\t" << loc_s << "\n"; 
             if(loc_s.find(line) == std::string::npos)
               continue;
             
