@@ -156,7 +156,6 @@ endif
 override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith \
 			-fPIC -I include/ -DAFL_PATH=\"$(HELPER_PATH)\"  \
 			-DBIN_PATH=\"$(BIN_PATH)\" -DDOC_PATH=\"$(DOC_PATH)\" \
-			-lssl -lcrypto
 # -fstack-protector
 
 ifeq "$(SYS)" "FreeBSD"
@@ -255,7 +254,7 @@ else
 endif
 
 ifneq "$(filter Linux GNU%,$(SYS))" ""
-  override LDFLAGS += -ldl -lrt -lm
+  override LDFLAGS += -ldl -lrt -lm  -lssl -lcrypto
 endif
 
 ifneq "$(findstring FreeBSD, $(SYS))" ""

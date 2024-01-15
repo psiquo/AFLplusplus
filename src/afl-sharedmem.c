@@ -1,4 +1,8 @@
 /*
+  ESTENDERE BITMAP COVERAGE
+*/
+
+/*
    american fuzzy lop++ - shared memory related code
    -------------------------------------------------
 
