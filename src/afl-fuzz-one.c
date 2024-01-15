@@ -25,6 +25,7 @@
 
 #include "afl-fuzz.h"
 #include <string.h>
+#include <stdio.h>
 #include <limits.h>
 #include "cmplog.h"
 #include "afl-mutations.h"
@@ -69,6 +70,31 @@ static int select_algorithm(afl_state_t *afl, u32 max_algorithm) {
 
   return i_puppet;
 
+}
+
+//PISQUO
+
+
+int arr_contains(int *arr, int arr_size, u32 value) {
+  if(!arr)
+    return 1;
+
+  for(int i = 0; i < arr_size; i++){
+    if((u32) arr[i] == value){
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int arr_contains_n(int *arr, int arr_size, u32 value, int count){
+    int res = 1;
+
+    for(int i = 0; i < count && res; i++){
+      res &= arr_contains(arr,arr_size,value + i);
+    }
+
+    return res;
 }
 
 /* Helper function to see if a particular change (xor_val = old ^ new) could
@@ -364,38 +390,38 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
   }
 
-  if (likely(afl->pending_favored)) {
+  // if (likely(afl->pending_favored)) {
 
-    /* If we have any favored, non-fuzzed new arrivals in the queue,
-       possibly skip to them at the expense of already-fuzzed or non-favored
-       cases. */
+  //   /* If we have any favored, non-fuzzed new arrivals in the queue,
+  //      possibly skip to them at the expense of already-fuzzed or non-favored
+  //      cases. */
 
-    if ((afl->queue_cur->fuzz_level || !afl->queue_cur->favored) &&
-        likely(rand_below(afl, 100) < SKIP_TO_NEW_PROB)) {
+  //   if ((afl->queue_cur->fuzz_level || !afl->queue_cur->favored) &&
+  //       likely(rand_below(afl, 100) < SKIP_TO_NEW_PROB)) {
 
-      return 1;
+  //     return 1;
 
-    }
+  //   }
 
-  } else if (!afl->non_instrumented_mode && !afl->queue_cur->favored &&
+  // } else if (!afl->non_instrumented_mode && !afl->queue_cur->favored &&
 
-             afl->queued_items > 10) {
+  //            afl->queued_items > 10) {
 
-    /* Otherwise, still possibly skip non-favored cases, albeit less often.
-       The odds of skipping stuff are higher for already-fuzzed inputs and
-       lower for never-fuzzed entries. */
+  //   /* Otherwise, still possibly skip non-favored cases, albeit less often.
+  //      The odds of skipping stuff are higher for already-fuzzed inputs and
+  //      lower for never-fuzzed entries. */
 
-    if (afl->queue_cycle > 1 && !afl->queue_cur->fuzz_level) {
+  //   if (afl->queue_cycle > 1 && !afl->queue_cur->fuzz_level) {
 
-      if (likely(rand_below(afl, 100) < SKIP_NFAV_NEW_PROB)) { return 1; }
+  //     if (likely(rand_below(afl, 100) < SKIP_NFAV_NEW_PROB)) { return 1; }
 
-    } else {
+  //   } else {
 
-      if (likely(rand_below(afl, 100) < SKIP_NFAV_OLD_PROB)) { return 1; }
+  //     if (likely(rand_below(afl, 100) < SKIP_NFAV_OLD_PROB)) { return 1; }
 
-    }
+  //   }
 
-  }
+  // }
 
 #endif                                                     /* ^IGNORE_FINDS */
 
@@ -2019,7 +2045,7 @@ custom_mutator_stage:
    ****************/
 
 havoc_stage:
-
+  printf("PORCO DIO\n");
   if (unlikely(afl->custom_only)) {
 
     /* Force UI update */
@@ -2220,6 +2246,30 @@ havoc_stage:
 
     retry_havoc_step: {
 
+      // PISQUO
+      #define MAX_RETRIES 100
+
+      static u32* taint_map = NULL;
+      static int taint_size;
+      static u32 max_taint = 0;
+      if(!taint_map && getenv("AFL_TAINT_FILE")) {
+        FILE *taint_file = fopen(getenv("AFL_TAINT_FILE"),"r");
+
+        fscanf(taint_file,"%d",&taint_size);
+
+        taint_map = calloc(taint_size,sizeof(u32));
+
+        for(int i = 0; i < taint_size; i++){
+          fscanf(taint_file,"%u",&(taint_map[i]));
+
+          if(taint_map[i] > max_taint)
+            max_taint = taint_map[i];
+        }
+
+        fclose(taint_file);
+      }
+
+
       u32 r = rand_below(afl, rand_max), item;
 
       switch (mutation_array[r]) {
@@ -2227,8 +2277,18 @@ havoc_stage:
         case MUT_FLIPBIT: {
 
           /* Flip a single bit somewhere. Spooky! */
+
           u8  bit = rand_below(afl, 8);
-          u32 off = rand_below(afl, temp_len);
+          u32 off;
+          
+          do { 
+            off = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_FLIPBIT] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+         
+          
           out_buf[off] ^= 1 << bit;
 
 #ifdef INTROSPECTION
@@ -2247,8 +2307,16 @@ havoc_stage:
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " INTERESTING8_%u", item);
           strcat(afl->mutation, afl->m_tmp);
-#endif
-          out_buf[rand_below(afl, temp_len)] = interesting_8[item];
+#endif  
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+
+          out_buf[off] = interesting_8[item];
           break;
 
         }
@@ -2264,8 +2332,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " INTERESTING16_%u", item);
           strcat(afl->mutation, afl->m_tmp);
 #endif
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
 
-          *(u16 *)(out_buf + rand_below(afl, temp_len - 1)) =
+          *(u16 *)(out_buf + off) =
               interesting_16[item];
 
           break;
@@ -2283,7 +2358,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " INTERESTING16BE_%u", item);
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          *(u16 *)(out_buf + rand_below(afl, temp_len - 1)) =
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+
+          *(u16 *)(out_buf + off) =
               SWAP16(interesting_16[item]);
 
           break;
@@ -2300,9 +2383,16 @@ havoc_stage:
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " INTERESTING32_%u", item);
           strcat(afl->mutation, afl->m_tmp);
-#endif
+#endif  
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
 
-          *(u32 *)(out_buf + rand_below(afl, temp_len - 3)) =
+          *(u32 *)(out_buf + off) =
               interesting_32[item];
 
           break;
@@ -2320,7 +2410,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " INTERESTING32BE_%u", item);
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          *(u32 *)(out_buf + rand_below(afl, temp_len - 3)) =
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+
+          *(u32 *)(out_buf + off) =
               SWAP32(interesting_32[item]);
 
           break;
@@ -2336,7 +2434,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " ARITH8-_%u", item);
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          out_buf[rand_below(afl, temp_len)] -= item;
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+
+          out_buf[off] -= item;
           break;
 
         }
@@ -2350,7 +2456,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " ARITH8+_%u", item);
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          out_buf[rand_below(afl, temp_len)] += item;
+          u32 off;
+          do { 
+            off = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,off));
+
+          out_buf[off] += item;
           break;
 
         }
@@ -2361,7 +2475,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 1);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           item = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2380,7 +2501,13 @@ havoc_stage:
 
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 1);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
           u16 num = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2400,7 +2527,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 1);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           item = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2419,7 +2553,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 1);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 1);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           u16 num = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2439,7 +2580,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 4)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 3);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           item = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2458,7 +2606,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 4)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 3);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+          
           u32 num = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2478,7 +2633,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 4)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 3);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           item = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2497,7 +2659,14 @@ havoc_stage:
 
           if (unlikely(temp_len < 4)) { break; }  // no retry
 
-          u32 pos = rand_below(afl, temp_len - 3);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len - 3);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           u32 num = 1 + rand_below(afl, ARITH_MAX);
 
 #ifdef INTROSPECTION
@@ -2517,7 +2686,14 @@ havoc_stage:
              why not. We use XOR with 1-255 to eliminate the
              possibility of a no-op. */
 
-          u32 pos = rand_below(afl, temp_len);
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
           item = 1 + rand_below(afl, 255);
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " RAND8_%u",
@@ -2537,7 +2713,15 @@ havoc_stage:
 
             u32 clone_len = choose_block_len(afl, temp_len);
             u32 clone_from = rand_below(afl, temp_len - clone_len + 1);
-            u32 clone_to = rand_below(afl, temp_len);
+            u32 clone_to ;
+            do { 
+              clone_to = rand_below(afl, temp_len);
+              #ifdef PDEBUG
+              printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+              #endif
+            } while(!arr_contains(taint_map,taint_size,clone_to));
+
+            // /clone_to = rand_below(afl, temp_len);
 
 #ifdef INTROSPECTION
             snprintf(afl->m_tmp, sizeof(afl->m_tmp), " CLONE-%s_%u_%u_%u",
@@ -2585,7 +2769,13 @@ havoc_stage:
             /* Insert a block of constant bytes (25%). */
 
             u32 clone_len = choose_block_len(afl, HAVOC_BLK_XL);
-            u32 clone_to = rand_below(afl, temp_len);
+            u32 clone_to ;
+            do { 
+              clone_to = rand_below(afl, temp_len);
+              #ifdef PDEBUG
+              printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+              #endif
+            } while(!arr_contains(taint_map,taint_size,clone_to));
             u32 strat = rand_below(afl, 2);
             u32 clone_from = clone_to ? clone_to - 1 : 0;
             item = strat ? rand_below(afl, 256) : out_buf[clone_from];
@@ -2641,7 +2831,13 @@ havoc_stage:
           do {
 
             copy_from = rand_below(afl, temp_len - copy_len + 1);
-            copy_to = rand_below(afl, temp_len - copy_len + 1);
+            do { 
+              copy_to = rand_below(afl, temp_len - copy_len + 1);
+              #ifdef PDEBUG
+              printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+              #endif
+            } while(!arr_contains(taint_map,taint_size,copy_to));
+            //copy_to = rand_below(afl, temp_len - copy_len + 1);
 
           } while (unlikely(copy_from == copy_to));
 
@@ -2663,7 +2859,14 @@ havoc_stage:
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
           u32 copy_len = choose_block_len(afl, temp_len - 1);
-          u32 copy_to = rand_below(afl, temp_len - copy_len + 1);
+          u32 copy_to;
+          do { 
+              copy_to = rand_below(afl, temp_len - copy_len + 1);
+              #ifdef PDEBUG
+              printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+              #endif
+          } while(!arr_contains(taint_map,taint_size,copy_to));
+          //copy_to = rand_below(afl, temp_len - copy_len + 1);
           u32 strat = rand_below(afl, 2);
           u32 copy_from = copy_to ? copy_to - 1 : 0;
           item = strat ? rand_below(afl, 256) : out_buf[copy_from];
@@ -2688,7 +2891,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " BYTEADD_");
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          out_buf[rand_below(afl, temp_len)]++;
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
+          out_buf[pos]++;
           break;
 
         }
@@ -2701,7 +2912,15 @@ havoc_stage:
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " BYTESUB_");
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          out_buf[rand_below(afl, temp_len)]--;
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
+          out_buf[pos]--;
           break;
 
         }
@@ -2713,8 +2932,16 @@ havoc_stage:
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " FLIP8_");
           strcat(afl->mutation, afl->m_tmp);
-#endif
-          out_buf[rand_below(afl, temp_len)] ^= 0xff;
+#endif  
+          u32 pos;
+          do { 
+            pos = rand_below(afl, temp_len);
+            #ifdef PDEBUG
+            printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+            #endif
+          } while(!arr_contains(taint_map,taint_size,pos));
+
+          out_buf[pos] ^= 0xff;
           break;
 
         }
@@ -2731,7 +2958,7 @@ havoc_stage:
 
             switch_to = rand_below(afl, temp_len);
 
-          } while (unlikely(switch_from == switch_to));
+          } while (unlikely(switch_from == switch_to) || !arr_contains(taint_map,taint_size,switch_to));
 
           if (switch_from < switch_to) {
 
@@ -2779,7 +3006,14 @@ havoc_stage:
 
           /* Don't delete too much. */
 
-          u32 del_len = choose_block_len(afl, temp_len - 1);
+          u32 del_len;
+          int count = 0;
+          //PISQUO: Discutere con Andre
+          do {
+            del_len = choose_block_len(afl, temp_len - 1);
+            if(count++ > MAX_RETRIES)
+              goto retry_havoc_step;
+          } while(temp_len - del_len <= max_taint);
           u32 del_from = rand_below(afl, temp_len - del_len + 1);
 
 #ifdef INTROSPECTION
@@ -2817,7 +3051,7 @@ havoc_stage:
 
               j = rand_below(afl, i + 1);
 
-            } while (unlikely(i == j));
+            } while (unlikely(i == j) && !(arr_contains(taint_map,taint_size,j) || arr_contains(taint_map,taint_size,i)));
 
             unsigned char temp = out_buf[off + i];
             out_buf[off + i] = out_buf[off + j];
@@ -2838,6 +3072,10 @@ havoc_stage:
           /* Don't delete too much. */
 
           u32 del_len = 1;
+
+          if(temp_len - del_len <= max_taint)
+            break;
+
           u32 del_from = rand_below(afl, temp_len - del_len + 1);
 
 #ifdef INTROSPECTION
@@ -2858,7 +3096,14 @@ havoc_stage:
           if (unlikely(temp_len < 2)) { break; }  // no retry
 
           u32 clone_len = 1;
-          u32 clone_to = rand_below(afl, temp_len);
+          u32 clone_to;
+          do { 
+              clone_to = rand_below(afl, temp_len);
+              #ifdef PDEBUG
+              printf("[MUT_INTERESTING8] off %u %sin map\n",off, arr_contains(taint_map,taint_size,off) ? "" : "not ");
+              #endif
+          } while(!arr_contains(taint_map,taint_size,clone_to));
+          //clone_to = rand_below(afl, temp_len);
           u32 strat = rand_below(afl, 2);
           u32 clone_from = clone_to ? clone_to - 1 : 0;
           item = strat ? rand_below(afl, 256) : out_buf[clone_from];
@@ -3037,7 +3282,7 @@ havoc_stage:
         }
 
         case MUT_INSERTASCIINUM: {
-
+          
           u32 len = 1 + rand_below(afl, 8);
           u32 pos = rand_below(afl, temp_len);
           /* Insert ascii number. */
@@ -3079,7 +3324,13 @@ havoc_stage:
 
           if (unlikely(extra_len > temp_len)) { goto retry_havoc_step; }
 
-          u32 insert_at = rand_below(afl, temp_len - extra_len + 1);
+          u32 insert_at;
+          do
+          {
+            insert_at = rand_below(afl, temp_len - extra_len + 1);
+          } while (!arr_contains(taint_map,taint_size,insert_at));
+           
+          
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " EXTRA-OVERWRITE_%u_%u",
                    insert_at, extra_len);
@@ -3104,7 +3355,12 @@ havoc_stage:
           }
 
           u8 *ptr = afl->extras[use_extra].data;
-          u32 insert_at = rand_below(afl, temp_len + 1);
+          u32 insert_at;
+          do
+          {
+            insert_at = rand_below(afl, temp_len - extra_len + 1);
+          } while (!arr_contains(taint_map,taint_size,insert_at));
+          //u32 insert_at = rand_below(afl, temp_len + 1);
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " EXTRA-INSERT_%u_%u",
                    insert_at, extra_len);
@@ -3137,7 +3393,12 @@ havoc_stage:
 
           if (unlikely(extra_len > temp_len)) { goto retry_havoc_step; }
 
-          u32 insert_at = rand_below(afl, temp_len - extra_len + 1);
+          u32 insert_at;
+          do
+          {
+            insert_at = rand_below(afl, temp_len - extra_len + 1);
+          } while (!arr_contains(taint_map,taint_size,insert_at));
+          //u32 insert_at = rand_below(afl, temp_len - extra_len + 1);
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp),
                    " AUTO-EXTRA-OVERWRITE_%u_%u", insert_at, extra_len);
@@ -3162,7 +3423,12 @@ havoc_stage:
           }
 
           u8 *ptr = afl->a_extras[use_extra].data;
-          u32 insert_at = rand_below(afl, temp_len + 1);
+          u32 insert_at;
+          do
+          {
+            insert_at = rand_below(afl, temp_len + 1);
+          } while (!arr_contains(taint_map,taint_size,insert_at));
+          //u32 insert_at = rand_below(afl, temp_len + 1);
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " AUTO-EXTRA-INSERT_%u_%u",
                    insert_at, extra_len);
@@ -3216,7 +3482,9 @@ havoc_stage:
           if (copy_len > temp_len) copy_len = temp_len;
 
           copy_from = rand_below(afl, new_len - copy_len + 1);
-          copy_to = rand_below(afl, temp_len - copy_len + 1);
+          do {
+            copy_to = rand_below(afl, temp_len - copy_len + 1);
+          } while(!arr_contains(taint_map,taint_size,copy_to));
 
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp),
@@ -3266,7 +3534,9 @@ havoc_stage:
 
           clone_len = choose_block_len(afl, new_len);
           clone_from = rand_below(afl, new_len - clone_len + 1);
-          clone_to = rand_below(afl, temp_len + 1);
+          do {
+            clone_to = rand_below(afl, temp_len + 1);
+          } while(!arr_contains(taint_map,taint_size,clone_to));
 
           u8 *temp_buf =
               afl_realloc(AFL_BUF_PARAM(out_scratch), temp_len + clone_len + 1);
@@ -3444,12 +3714,12 @@ abandon_entry:
     --afl->pending_not_fuzzed;
     afl->queue_cur->was_fuzzed = 1;
     afl->reinit_table = 1;
-    if (afl->queue_cur->favored) {
+    // if (afl->queue_cur->favored) {
 
-      --afl->pending_favored;
-      afl->smallest_favored = -1;
+    //   --afl->pending_favored;
+    //   afl->smallest_favored = -1;
 
-    }
+    // }
 
   }
 
@@ -3497,38 +3767,38 @@ static u8 mopt_common_fuzzing(afl_state_t *afl, MOpt_globals_t MOpt_globals) {
 
 #else
 
-  if (likely(afl->pending_favored)) {
+  // if (likely(afl->pending_favored)) {
 
-    /* If we have any favored, non-fuzzed new arrivals in the queue,
-       possibly skip to them at the expense of already-fuzzed or non-favored
-       cases. */
+  //   /* If we have any favored, non-fuzzed new arrivals in the queue,
+  //      possibly skip to them at the expense of already-fuzzed or non-favored
+  //      cases. */
 
-    if ((afl->queue_cur->fuzz_level || !afl->queue_cur->favored) &&
-        rand_below(afl, 100) < SKIP_TO_NEW_PROB) {
+  //   if ((afl->queue_cur->fuzz_level || !afl->queue_cur->favored) &&
+  //       rand_below(afl, 100) < SKIP_TO_NEW_PROB) {
 
-      return 1;
+  //     return 1;
 
-    }
+  //   }
 
-  } else if (!afl->non_instrumented_mode && !afl->queue_cur->favored &&
+  // } else if (!afl->non_instrumented_mode && !afl->queue_cur->favored &&
 
-             afl->queued_items > 10) {
+  //            afl->queued_items > 10) {
 
-    /* Otherwise, still possibly skip non-favored cases, albeit less often.
-       The odds of skipping stuff are higher for already-fuzzed inputs and
-       lower for never-fuzzed entries. */
+  //   /* Otherwise, still possibly skip non-favored cases, albeit less often.
+  //      The odds of skipping stuff are higher for already-fuzzed inputs and
+  //      lower for never-fuzzed entries. */
 
-    if (afl->queue_cycle > 1 && !afl->queue_cur->fuzz_level) {
+  //   if (afl->queue_cycle > 1 && !afl->queue_cur->fuzz_level) {
 
-      if (likely(rand_below(afl, 100) < SKIP_NFAV_NEW_PROB)) { return 1; }
+  //     if (likely(rand_below(afl, 100) < SKIP_NFAV_NEW_PROB)) { return 1; }
 
-    } else {
+  //   } else {
 
-      if (likely(rand_below(afl, 100) < SKIP_NFAV_OLD_PROB)) { return 1; }
+  //     if (likely(rand_below(afl, 100) < SKIP_NFAV_OLD_PROB)) { return 1; }
 
-    }
+  //   }
 
-  }
+  // }
 
 #endif                                                     /* ^IGNORE_FINDS */
 
@@ -4979,6 +5249,7 @@ skip_extras:
    ****************/
 
 havoc_stage:
+  printf("PORCA MADONNA\n");
 pacemaker_fuzzing:
 
   afl->stage_cur_byte = -1;

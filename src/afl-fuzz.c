@@ -45,6 +45,14 @@
 extern u64 time_spent_working;
 #endif
 
+#define DAVIDE_PATH_COV
+
+#ifdef DAVIDE_PATH_COV
+#define ADDITIONAL_MAP_SIZE 16
+#else
+#define ADDITIONAL_MAP_SIZE 0
+#endif
+
 static void at_exit() {
 
   s32   i, pid1 = 0, pid2 = 0, pgrp = -1;
@@ -2234,7 +2242,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   afl->argv = use_argv;
   afl->fsrv.trace_bits =
-      afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+      afl_shm_init(&afl->shm, afl->fsrv.map_size + ADDITIONAL_MAP_SIZE, afl->non_instrumented_mode); // TODO [1]
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&

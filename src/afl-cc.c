@@ -3139,6 +3139,18 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
 
     }
 
+    cc_params[cc_par_cnt++] =
+              "-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table";
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-branch-complexity-pass.so", obj_path);
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-lssl", obj_path);
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-lcrypto", obj_path);
+    cc_params[cc_par_cnt++] =
+            alloc_printf("-fpass-plugin=%s/afl-path-collection-pass.so", obj_path);
+
+
   }
 
   if (compiler_mode == GCC_PLUGIN) {

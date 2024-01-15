@@ -52,6 +52,13 @@
 #ifdef __linux__
   #include <dlfcn.h>
 
+#define DAVIDE_PATH_COV
+
+#ifdef DAVIDE_PATH_COV
+#define ADDITIONAL_MAP_SIZE 16
+#else
+#define ADDITIONAL_MAP_SIZE 0
+#endif
 /* function to load nyx_helper function from libnyx.so */
 
 nyx_plugin_handler_t *afl_load_libnyx_plugin(u8 *libnyx_binary) {
@@ -1655,7 +1662,7 @@ afl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout,
 #ifdef __linux__
   if (!fsrv->nyx_mode) {
 
-    memset(fsrv->trace_bits, 0, fsrv->map_size);
+    memset(fsrv->trace_bits, 0, fsrv->map_size + ADDITIONAL_MAP_SIZE); // TODO [3]
     MEM_BARRIER();
 
   }
