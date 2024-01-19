@@ -65,7 +65,7 @@ extern "C" {
 #endif
 
 // AFL++ shared memory fuzz cases
-int                   __afl_sharedmem_fuzzing = 1;
+int                   __afl_sharedmem_fuzzing = 0;
 extern unsigned int  *__afl_fuzz_len;
 extern unsigned char *__afl_fuzz_ptr;
 
