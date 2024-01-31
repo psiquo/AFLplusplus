@@ -3011,12 +3011,17 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
             alloc_printf("-fpass-plugin=%s/afl-path-collection-pass.so", obj_path); 
     */
 
-    insert_param(aflcc,"-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table");
     insert_param(aflcc,"-lcrypto");
     insert_param(aflcc,"-lssl");
 
-    load_llvm_pass(aflcc,"afl-branch-complexity-pass.so");
-    load_llvm_pass(aflcc,"afl-path-collection-pass.so");
+    if(getenv("AFL_CODE_DUMP") != NULL){
+    	insert_param(aflcc,"-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table");
+    	load_llvm_pass(aflcc,"afl-path-collection-pass.so");
+    }
+    
+    if(getenv("OSS_FUZZ_BRANCH_COMPLEXITY") != NULL){
+    	load_llvm_pass(aflcc,"afl-branch-complexity-pass.so");
+    }
 
     if (getenv("AFL_LLVM_DICT2FILE")) {
 
