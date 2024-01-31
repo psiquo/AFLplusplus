@@ -54,7 +54,7 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
   #include "hash.h"
 #endif
 
-int                   __afl_sharedmem_fuzzing = 0;
+int                   __afl_sharedmem_fuzzing = 1;
 extern unsigned int * __afl_fuzz_len;
 extern unsigned char *__afl_fuzz_ptr;
 
