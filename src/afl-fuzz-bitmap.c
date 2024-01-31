@@ -23,12 +23,6 @@
 
  */
 
-#define DAVIDE_PATH_COV 1
-
-#ifdef DAVIDE_PATH_COV
-#include <khash.h>
-#endif
-
 #include "afl-fuzz.h"
 #include <limits.h>
 #if !defined NAME_MAX
@@ -458,10 +452,6 @@ void write_crash_readme(afl_state_t *afl) {
    save or queue the input test case for further analysis if so. Returns 1 if
    entry is saved, 0 otherwise. */
 
-#ifdef DAVIDE_PATH_COV
-KHASH_SET_INIT_STR(path)
-#endif
-
 u8 __attribute__((hot))
 save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
@@ -491,39 +481,6 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
   s32 fd;
   u64 cksum = 0;
 
-  #ifdef DAVIDE_PATH_COV
-  static khash_t(path) *h = NULL;
-  if(h == NULL)
-   h = kh_init(path);
-
-  int is_new_path;
-  u8 * key = afl->fsrv.trace_bits + afl->fsrv.map_size;
- 
-  int empty_path = 1,hret;
-  for(int i = 0; i < 16; i++){
-    empty_path &= (key[i] == 0);
-  }
-
-  // FILE *f = fopen("out_log","a");
-  // if(!empty_path){
-  //    for(int i = 0; i < 16; i++){
-  //     fprintf(f,"%02x",key[i]);
-  //    }
-  //    fprintf(f,"\n");
-  // }
-  if((is_new_path = (!empty_path && (kh_get(path,h,key) == kh_end(h))))){
-    //fprintf(f,"NEW PATH\n");
-    kh_put(path,h,key,&hret);
-  }// else {
-  //   if(!empty_path)
-  //     fprintf(f,"OLD PATH\n");
-  // }
-
-  // fflush(f);
-  // fclose(f);
-  #endif
-
-  
   /* Update path frequency. */
 
   /* Generating a hash on every input is super expensive. Bad idea and should
@@ -559,14 +516,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
     }
 
-    int to_be_saved;
-    #ifdef DAVIDE_PATH_COV
-      to_be_saved = !is_new_path;
-    #else
-      to_be_saved = likely(!new_bits);
-    #endif
-
-    if (to_be_saved) {
+    if (likely(!new_bits)) {
 
       if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
       return 0;

@@ -222,20 +222,7 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 
 
   remove(filename);
-
-  #ifdef DAVIDE_PATH_COV  
-  FILE *trace_file_path = fopen(outfile_t,"r");
-
-  char byte[2];
-
-  for(int i = 0; i < 16; i++){
-    fscanf(trace_file_path,"%2hhx",&(afl->fsrv.trace_bits + afl->fsrv.map_size)[i]);
-  }
-
-  fclose(trace_file_path);
-  #endif
-
-  #endif
+ #endif
 
 #ifdef PROFILING
   clock_gettime(CLOCK_REALTIME, &spec);
