@@ -3166,6 +3166,9 @@ int main(int argc, char **argv, char **envp) {
   if (aflcc->debug)
     debugf_args((s32)aflcc->cc_par_cnt, (char **)aflcc->cc_params);
 
+  //for(int i = 0; aflcc->cc_params[i]; i++)
+  //  printf("%s\n",aflcc->cc_params[i]);
+
   if (aflcc->passthrough) {
 
     argv[0] = aflcc->cc_params[0];

@@ -37,6 +37,7 @@ class BranchComplexityPass : public PassInfoMixin<BranchComplexityPass> {
 PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
   for(Function &F : M.getFunctionList()) {
       bool build = false;
+      //errs() << "In function " << F.getName() << "\n";
       for(BasicBlock &BB : F.getBasicBlockList()) {
         for (Instruction &inst : BB.getInstList()){
           if(DILocation *Loc = inst.getDebugLoc().get()){
@@ -44,9 +45,11 @@ PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line)
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
             
+            //errs() << "In  " << inst << " " + loc_s << "\n";
+            
             if(loc_s.find(line) == std::string::npos)
               continue;
-            
+
             if(!build){
               errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding instumentation\n";
 
