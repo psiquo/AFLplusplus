@@ -76,6 +76,13 @@
 #include <sys/file.h>
 #include <sys/types.h>
 
+#define DAVIDE_CUSTOM_TRACE
+
+#ifdef DAVIDE_CUSTOM_TRACE
+#include <openssl/md5.h>
+#include <unistd.h>
+#endif
+
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || \
     defined(__NetBSD__) || defined(__DragonFly__)
   #include <sys/sysctl.h>
@@ -429,6 +436,26 @@ struct foreign_sync {
 
 };
 
+#ifdef DAVIDE_CUSTOM_TRACE
+
+#define CRASH_HASH_SIZE 1024
+
+typedef struct crash_info_block {
+  unsigned char digest[2 * MD5_DIGEST_LENGTH + 1];
+
+  unsigned int crash;
+  unsigned int nocrash;
+
+  struct crash_info_block* next;
+} crash_info_block_t;
+
+typedef struct crash_info_head {
+  crash_info_block_t * head;
+  crash_info_block_t * last;
+} crash_info_head_t ;
+
+unsigned int crash_hash_func(char *s);
+#endif
 typedef struct afl_state {
 
   /* Position of this state in the global states list */
@@ -788,7 +815,9 @@ typedef struct afl_state {
   FILE *introspection_file;
   u32   bitsmap_size;
 #endif
-
+#ifdef DAVIDE_CUSTOM_TRACE
+  crash_info_head_t *crash_hashmap[CRASH_HASH_SIZE];
+#endif
 } afl_state_t;
 
 struct custom_mutator {

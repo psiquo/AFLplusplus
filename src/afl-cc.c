@@ -1751,7 +1751,7 @@ param_st parse_fsanitize(aflcc_state_t *aflcc, u8 *cur_argv, u8 scan) {
 
     }
 
-  } else if ((!strncmp(cur_argv, "-fsanitize=fuzzer-",
+  } else if (((!strncmp(cur_argv, "-fsanitize=fuzzer-",
 
                        strlen("-fsanitize=fuzzer-")) ||
               !strncmp(cur_argv, "-fsanitize-coverage",
@@ -1760,7 +1760,7 @@ param_st parse_fsanitize(aflcc_state_t *aflcc, u8 *cur_argv, u8 scan) {
                       strlen("sanitize-coverage-allow")) &&
               strncmp(cur_argv, "sanitize-coverage-deny",
                       strlen("sanitize-coverage-deny")) &&
-              aflcc->instrument_mode != INSTRUMENT_LLVMNATIVE)) {
+              aflcc->instrument_mode != INSTRUMENT_LLVMNATIVE)) && getenv("AFL_CODE_DUMP") == NULL) {
 
     if (scan) {
 

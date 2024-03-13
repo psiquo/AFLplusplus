@@ -1550,9 +1550,10 @@ typedef struct list_s{
 } list_t;
 
 list_t *paths = NULL;
+list_t *head = NULL;
 
 FILE *fptr = NULL;
-char *filename = NULL;
+char *afl_trace_filename = NULL;
 
 
 void append(list_t** l, uint32_t value){
@@ -1601,22 +1602,45 @@ char *list_to_string(list_t *l) {
     for(list_t *head = l; head; head=head->next){
         offset += sprintf(str + offset,"%u\n",head->value);
     }
+
+    return str;
 }
 
 void __dump_path_collection(void){
   //printf("DUMPING\n");
-  if(filename == NULL) {
-          filename = getenv("AFL_TRACE_FILE");
+
+  //if(getenv("AFL_SAVE_FIRST_CRASH") && !getenv("AFL_REACHED_LINE")){
+  //  setenv("AFL_REACHED_LINE","1",1);
+  //}
+  
+  if(afl_trace_filename == NULL) {
+          afl_trace_filename = getenv("AFL_TRACE_FILE");
   }
 
-  fptr = fopen(filename,"w");
-  
+  if(paths == NULL){
+    return;
+  }
+
+  fptr = fopen(afl_trace_filename,"w");
+
+  if(fptr == NULL){
+    //printf("Cannot open file %s, returning\n",filename);
+    return;
+  }
+  // if (fptr == -1) {
+  //     fprintf(stderr, "unable to open '%s': %s\n", filename, strerror(errno));
+  //     exit(1);
+  // }
+
+  // printf("FPTR: %p\n",fptr);
+
   MD5_CTX c;
   ssize_t bytes;  
   
   unsigned char digest[MD5_DIGEST_LENGTH];
 
   const char * path_cstr = list_to_string(paths);
+  //printf("%s\n",path_cstr);
 
   MD5_Init(&c);
   MD5_Update(&c,path_cstr,strlen(path_cstr));
@@ -1625,6 +1649,7 @@ void __dump_path_collection(void){
       fprintf(fptr,"%02x",digest[i]);
   }
   fclose(fptr);
+  free(path_cstr);
 }
 #endif
 
@@ -1664,7 +1689,12 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
   */
 #ifdef CUSTOM_TRACE
 //printf("COLLECTING\n");
-append(&paths,*guard);
+append(&head,*guard);
+
+if(paths == NULL)
+  paths = head;
+else
+  head = head->next;
 #endif
 
 #if (LLVM_VERSION_MAJOR < 9)

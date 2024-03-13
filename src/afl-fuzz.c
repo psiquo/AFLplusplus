@@ -2968,6 +2968,20 @@ stop_fuzzing:
 
   }
 
+  char out_path[PATH_MAX];
+  sprintf(out_path,"%s/trace.csv",afl->out_dir);
+  FILE *f = fopen(out_path,"w");
+  for(int i = 0; i < CRASH_HASH_SIZE; i++){
+    crash_info_head_t *top = afl->crash_hashmap[i];
+    if(top == NULL){
+      continue;
+    }
+    for(crash_info_block_t *head = top->head; head; head = head -> next) {
+      fprintf(f,"%s, %u, %u\n",head->digest,head->crash,head->nocrash);
+    }
+  }
+  fclose(f);
+
   /* Running for more than 30 minutes but still doing first cycle? */
 
   if (afl->queue_cycle == 1 &&

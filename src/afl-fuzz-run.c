@@ -34,6 +34,9 @@
 
 #include "cmplog.h"
 
+// LINUX ONLY
+#include <sys/sendfile.h>
+#include <sys/stat.h>
 #ifdef PROFILING
 u64 time_spent_working = 0;
 #endif
@@ -53,14 +56,30 @@ u64 time_spent_working = 0;
 
 char *filename = NULL;
 
-inline void copy_file(char * source,  char * dest){
+unsigned int crash_hash_func(char *s){
+  unsigned long hash = 5381;
+  int c;
+
+  while (c = *s++)
+      hash = ((hash << 5) + hash) ^ c; /* hash * 33 + c */
+
+  return hash % CRASH_HASH_SIZE;
+}
+
+void copy_file(char * source,  char * dest){
   
   unsigned char buf[4096] = {};
   size_t bytes;
 
+  //printf("%s %s\n",source,dest);
   FILE *sf,*df;
   sf = fopen(source,"rb");
   df = fopen(dest,"wb");
+  
+  if(df == NULL || sf == NULL){
+    printf("Cannot open files:\n%s: %p\n%s: %p\n",source,sf,dest,df);
+    return;
+  }
 
   while((bytes = fread(buf,sizeof *buf, 1024,sf)) > 0){
     fwrite(buf,sizeof *buf, bytes,df);
@@ -68,6 +87,42 @@ inline void copy_file(char * source,  char * dest){
   
   fclose(sf);
   fclose(df);
+}
+
+crash_info_block_t * get_crash_info_block(crash_info_head_t **hashmap, unsigned char * digest) {
+  crash_info_head_t **head = hashmap + crash_hash_func(digest);
+
+  if(*head == NULL) {
+    crash_info_head_t *tmp_head = calloc(1,sizeof(crash_info_head_t));
+    *head = tmp_head;
+  }
+
+  crash_info_block_t *start;
+  for(start = (*head)->head; start; start = start->next){
+    if(!strncmp(digest,start->digest,2*MD5_DIGEST_LENGTH)){
+      return start;
+    }
+  }
+
+  if(start == NULL){
+    crash_info_block_t *tmp_block = calloc(1,sizeof(crash_info_block_t));
+
+    strncpy(tmp_block->digest,digest,2 * MD5_DIGEST_LENGTH);
+
+    if ((*head)->head == NULL)
+      (*head)->head = tmp_block;
+
+    if((*head)->last != NULL )
+      (*head)->last->next = tmp_block;
+
+    (*head)->last = tmp_block;
+
+    return tmp_block;
+  }
+
+  //Should not reach
+  printf("SHOULD NOT REACH\n");
+  exit(-1);
 }
 #endif
 
@@ -135,7 +190,7 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
     snprintf(fn,PATH_MAX,"%s/first_crash_time",afl->out_dir);
     FILE *elapsed_first_crash_f = fopen(fn,"w");
 
-    fprintf(elapsed_first_crash_f,"%lld",elapsed);
+    fprintf(elapsed_first_crash_f,"%lld\n%llu",elapsed,fsrv->total_execs);
   }
   #endif
 
@@ -153,14 +208,20 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
   if(trace_file == NULL)
 	  return res;
 
+  unsigned char trace[ 2 * MD5_DIGEST_LENGTH + 1] = {0};
+  fread(trace,sizeof(char),2*MD5_DIGEST_LENGTH,trace_file);
   fclose(trace_file);
-
+  remove(filename);
+  //printf("Trace: %s %s %c\n",trace, res == FSRV_RUN_CRASH ? "CRASH" : "NOCRASH",trace[20]);
+  if(strlen(trace) == 0)
+    return res;
   
-  char crash_dir[PATH_MAX];
-  char ncrash_dir[PATH_MAX];
+  char crash_dir[PATH_MAX] = {0};
+  char ncrash_dir[PATH_MAX] = {0};
+  char *base = NULL;
 
-  sprintf(crash_dir,"%s/crash",afl->out_dir);
-  sprintf(ncrash_dir,"%s/nocrash",afl->out_dir);
+  sprintf(crash_dir,"%s/inputs_crash",afl->out_dir);
+  sprintf(ncrash_dir,"%s/inputs_nocrash",afl->out_dir);
 
   if(stat(crash_dir,NULL) == -1){
       mkdir(crash_dir,0777);
@@ -170,20 +231,20 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
       mkdir(ncrash_dir,0777);
   }
 
-  MD5_CTX c;
+  /*MD5_CTX c;
   char buf[512];
   char digest[MD5_DIGEST_LENGTH];
-  int base_size = strlen("/nocrash/") + strlen(afl->out_dir);
-  char *base = NULL;
   char outfile_i[ base_size + strlen("_input") + 2 * MD5_DIGEST_LENGTH + 1];
-  char outfile_t[ base_size + strlen("_trace") + 2 * MD5_DIGEST_LENGTH + 1];
+  */
+  int base_size = strlen((res == FSRV_RUN_CRASH) ? crash_dir : ncrash_dir) + 1;
+  char outfile_t[PATH_MAX] = {0};
 
-  memset(outfile_i,0,sizeof outfile_i);
+  //memset(outfile_i,0,sizeof outfile_i);
   memset(outfile_t,0,sizeof outfile_t);
 
 
 
-  ssize_t bytes;
+  /*ssize_t bytes;
   FILE* f = fopen(afl->fsrv.out_file,"rb");
 
   MD5_Init(&c);
@@ -196,32 +257,49 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
   MD5_Final(digest,&c);
   
   fclose(f);
-
-  if(res == FSRV_RUN_CRASH){
-    base = crash_dir;
-    base_size = strlen("/crash/") + strlen(afl->out_dir);
-  } else {
-    base = ncrash_dir;
-    base_size = strlen("/nocrash/") + strlen(afl->out_dir);
+  */
+  crash_info_block_t *cur = get_crash_info_block(afl->crash_hashmap,trace);
+  if(cur == NULL){
+    printf("SHOULD NOT REACH 2\n");
+    exit(-1);
+    /*
+    cur = calloc(1,sizeof(crash_info_block_t));
+    cur->crash = 0;
+    cur->nocrash = 0;
+    strncpy(cur->digest,trace,2 * MD5_DIGEST_LENGTH);
+    
+    if(afl->crash_info_head == NULL && last == NULL){
+      afl->crash_info_head = cur;
+      last = cur;
+    } else {
+      last->next = cur;
+      last = cur;
+    } */
   }
 
-  sprintf(outfile_i,"%s/",base);
+  if(res == FSRV_RUN_CRASH){
+    cur->crash += 1;
+    base = crash_dir;
+  } else if(res == FSRV_RUN_OK) {
+    cur->nocrash += 1; 
+    base = ncrash_dir;
+  }
+
   sprintf(outfile_t,"%s/",base);
 
  
-  for(int i = 0; i < MD5_DIGEST_LENGTH; i++ ){
-    sprintf(outfile_i + base_size + (2 *i),"%02x",digest[i]);
-    sprintf(outfile_t + base_size + (2 *i),"%02x",digest[i]);
+  for(int i = 0; i < 2 * MD5_DIGEST_LENGTH; i++ ){
+    sprintf(outfile_t + base_size + i,"%c",trace[i]);
   }
 
-  sprintf(outfile_i + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
-  sprintf(outfile_t + base_size + 2 * MD5_DIGEST_LENGTH,"_trace");
+  //sprintf(outfile_i + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
+  sprintf(outfile_t + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
 
-  copy_file(afl->fsrv.out_file,outfile_i);
-  copy_file(filename,outfile_t);
+  //copy_file(afl->fsrv.out_file,outfile_i);
+  //printf("%s\n",outfile_t);
+  copy_file(afl->fsrv.out_file,outfile_t);
 
 
-  remove(filename);
  #endif
 
 #ifdef PROFILING
