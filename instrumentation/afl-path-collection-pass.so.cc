@@ -20,6 +20,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <cstring>
+#include <string>
+#include <map>
+#include <vector>
+#include <sstream>
 
 #include "afl-llvm-common.h"
 
@@ -34,29 +38,62 @@ class PathCollection : public PassInfoMixin<PathCollection> {
   };
 }
 
+std::vector<std::string>* split_string(std::string s,char delim) {
+  std::vector<std::string> *ret = new std::vector<std::string>();
+
+  std::stringstream stream(s);
+  std::string token;
+
+  if(s.find("@") != std::string::npos){
+    std::stringstream stream(s);
+    std::string token;
+
+    while(std::getline(stream,token,delim))
+      ret->push_back(token);
+  } else{
+    ret->push_back(s);
+  }
+
+  return ret;
+}
+
 PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
-  bool build = false;
+  std::map<std::string, int> built_map;
+  std::string matched;
+
   for(Function &F : M.getFunctionList()) {
       for(BasicBlock &BB : F.getBasicBlockList()) {
         for (Instruction &inst : BB.getInstList()){
+          matched = "";
           if(DILocation *Loc = inst.getDebugLoc().get()){
 
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
     		
             //if(!std::string(F.getName()).compare("parseCodeSection"))	    
-	          // errs() << F.getName() << ":" << inst << "\t" << loc_s << "\n"; 
-            if(loc_s.find(line) == std::string::npos)
+	          //errs() << F.getName() << ":" << inst << "\t" << loc_s << "\n"; 
+            bool t = false;
+            for(std::string l : *split_string(line,'@')){
+              //errs() << "Looking for " << l << "\n";
+              if(loc_s.length() >= l.length() && loc_s.compare(loc_s.length() - l.length(), l.length(),l) == 0){
+                matched = l;
+                t = true;
+                break;
+              }
+            }
+
+            if(!t){
               continue;
+            }
             
-            if(!build){
-              errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding instumentation\n";
+            if(!built_map[matched]){
+              errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding path instrumentation\n";
 
               IRBuilder<> assertBuilder(&inst);
               FunctionCallee fn = M.getOrInsertFunction("__dump_path_collection",
                                                     FunctionType::getVoidTy(M.getContext()));
               assertBuilder.CreateCall(fn,ArrayRef<Value *>({}));
-              build = true;
+              built_map[matched] = true;
             }
           }
         }

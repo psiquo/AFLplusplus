@@ -3015,7 +3015,7 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
     insert_param(aflcc,"-lssl");
 
     if(getenv("AFL_CODE_DUMP") != NULL){
-    	insert_param(aflcc,"-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table");
+    	insert_param(aflcc,"-fsanitize-coverage=bb,no-prune,pc-table,trace-pc-guard");
     	load_llvm_pass(aflcc,"afl-path-collection-pass.so");
     }
     

@@ -78,6 +78,15 @@ void copy_file(char * source,  char * dest){
   
   if(df == NULL || sf == NULL){
     printf("Cannot open files:\n%s: %p\n%s: %p\n",source,sf,dest,df);
+
+    if(sf != NULL){
+      fclose(sf);
+    }
+
+    if(df != NULL){
+      fclose(df);
+    }
+    
     return;
   }
 
@@ -196,17 +205,23 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 
   #ifdef DAVIDE_CUSTOM_TRACE
 
+  static int disabled = 0;
   if(filename == NULL){
  	if((filename = getenv("AFL_TRACE_FILE")) == NULL){
-		printf("Must provide tracefile location with AFL_TRACE_FILE\n");
-		exit(-1);
+		//printf("Must provide tracefile location with AFL_TRACE_FILE\n");
+		disabled = !disabled;
 	}
+  }
+
+  if(disabled){
+    return res;
   }
   
   FILE *trace_file = fopen(filename,"r");
   
-  if(trace_file == NULL)
+  if(trace_file == NULL){
 	  return res;
+  }
 
   unsigned char trace[ 2 * MD5_DIGEST_LENGTH + 1] = {0};
   fread(trace,sizeof(char),2*MD5_DIGEST_LENGTH,trace_file);
@@ -306,7 +321,7 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
   clock_gettime(CLOCK_REALTIME, &spec);
   time_spent_start = (spec.tv_sec * 1000000000) + spec.tv_nsec;
 #endif
-
+  
   return res;
 
 }

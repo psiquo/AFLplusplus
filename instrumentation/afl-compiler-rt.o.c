@@ -1648,6 +1648,7 @@ void __dump_path_collection(void){
   for(int i = 0; i < MD5_DIGEST_LENGTH; i++){
       fprintf(fptr,"%02x",digest[i]);
   }
+  fflush(fptr);
   fclose(fptr);
   free(path_cstr);
 }

@@ -20,6 +20,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <cstring>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <map>
 
 #include "afl-llvm-common.h"
 
@@ -34,30 +38,64 @@ class BranchComplexityPass : public PassInfoMixin<BranchComplexityPass> {
   };
 }
 
+std::vector<std::string>* split_string(std::string s,char delim) {
+  std::vector<std::string> *ret = new std::vector<std::string>();
+
+  if(s.find("@") != std::string::npos){
+    std::stringstream stream(s);
+    std::string token;
+
+    while(std::getline(stream,token,delim))
+      ret->push_back(token);
+  } else{
+    ret->push_back(s);
+  }
+
+  return ret;
+}
+
 PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
+  std::map<std::string, int> built_map;
+  std::string matched;
+
   for(Function &F : M.getFunctionList()) {
-      bool build = false;
-      //errs() << "In function " << F.getName() << "\n";
+      // errs() << "In function " << F.getName() << "\n";
       for(BasicBlock &BB : F.getBasicBlockList()) {
         for (Instruction &inst : BB.getInstList()){
+          matched = "";
           if(DILocation *Loc = inst.getDebugLoc().get()){
 
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
             
-            //errs() << "In  " << inst << " " + loc_s << "\n";
+            // errs() << "In  " << inst << " " + loc_s << "\n";
             
-            if(loc_s.find(line) == std::string::npos)
-              continue;
+            bool t = false;
+          
+            for(std::string l : *split_string(line,'@')){
+              // errs() << "Searching " << l << " in " << loc_s << "\n";
+              if(loc_s.length() >= l.length() && loc_s.compare(loc_s.length() - l.length(), l.length(),l) == 0){
+                matched = l;
+                t = true;
+                break;
+              }
+            }
 
-            if(!build){
+            if(!t){
+              continue;
+            }
+
+            // if(loc_s.find(line) == std::string::npos)
+            //   continue;
+
+            if(!built_map[matched]){
               errs() << "Found: " << inst << " " + loc_s << "\n" << "Adding instumentation\n";
 
               IRBuilder<> assertBuilder(&inst);
               FunctionCallee fn = M.getOrInsertFunction("abort",
                                                     FunctionType::getVoidTy(M.getContext()));
               assertBuilder.CreateCall(fn,ArrayRef<Value *>({}));
-              build = true;
+              built_map[matched] = true;
             }
           }
         }
@@ -100,8 +138,13 @@ PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MA
         return PreservedAnalyses::all();
     }
 
+    // char *file_path = getenv("OSS_FUZZ_FILE_PATH");
+
     std::ifstream instrFile;
 
+    //errs() << "Given instrumentation path: " << file_path << "\n";
+    // errs() << "DIRLOC: ";
+    // system("pwd");
     instrFile.open("instr_list.txt", std::ios::in);
 
     if(issue == NULL || (file_url == NULL && ! instrFile.is_open())){
@@ -128,7 +171,7 @@ PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MA
     while(std::getline(instrFile,line)) {
       if(line.rfind(issue,0) == 0){
         std::string instr_line = line.substr(line.find(" ") + 1);
-        instr_line.erase(instr_line.find_last_not_of("\n"));
+        //instr_line.erase(instr_line.find_last_not_of("\n"));
         ret = branch_complexity_instrument_line(M,instr_line);
       }
     }
