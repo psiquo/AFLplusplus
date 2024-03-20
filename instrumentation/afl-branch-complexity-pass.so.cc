@@ -11,8 +11,15 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Passes/PassPlugin.h"
-#include "llvm/Passes/PassBuilder.h"
+
+#if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
+  #include "llvm/Passes/PassPlugin.h"
+  #include "llvm/Passes/PassBuilder.h"
+  #include "llvm/IR/PassManager.h"
+#else
+  #include "llvm/IR/LegacyPassManager.h"
+  #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#endif
 
 #include <fstream>
 #include <iostream>
@@ -31,10 +38,19 @@ using namespace llvm;
 
 namespace {
 
+#if LLVM_MAJOR >= 11  
 class BranchComplexityPass : public PassInfoMixin<BranchComplexityPass> {
   public:
     PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
     static bool isRequired() {return true;} 
+  
+#else 
+class BranchComplexityPass : public ModulePass {
+    public: 
+      static char ID;
+      BranchComplexityPass() : ModulePass(ID) {}
+      bool runOnModule(Module &M)
+#endif
   };
 }
 
@@ -54,7 +70,12 @@ std::vector<std::string>* split_string(std::string s,char delim) {
   return ret;
 }
 
-PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
+//PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
+#if LLVM_VERSION_MAJOR >= 11  
+  PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line){
+#else
+  bool branch_complexity_instrument_line(Module &M, std::string line){
+#endif
   std::map<std::string, int> built_map;
   std::string matched;
 
@@ -101,9 +122,14 @@ PreservedAnalyses branch_complexity_instrument_line(Module &M, std::string line)
         }
       }
   }
-  return PreservedAnalyses::all();
+  #if LLVM_VERSION_MAJOR >= 11  
+        return PreservedAnalyses::all();
+  #else
+        return true;
+  #endif
 }
 
+#if LLVM_MAJOR >= 11
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {
 
@@ -128,14 +154,28 @@ llvmGetPassPluginInfo() {
           }};
 
 }
+#else
+char BranchComplexityPass::ID = 0;
+static RegisterPass<BranchComplexityPass>
+  X(/*PassArg=*/"BranchComplexityPass", /*Name=*/"BranchComplexityPass",/*CFGOnly=*/false, /*is_analysis=*/false);
+#endif
 
-PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MAM) {
+//PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MAM) {
+#if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
+  PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MAM){
+#else
+  bool BranchComplexityPass::runOnModule(Module &M){
+#endif
     char *issue = getenv("OSS_FUZZ_ISSUE");
     char *file_url = getenv("OSS_FUZZ_URL");
     char *enable = getenv("OSS_FUZZ_BRANCH_COMPLEXITY");
 
     if (enable == NULL){
-        return PreservedAnalyses::all();
+        #if LLVM_VERSION_MAJOR >= 11  
+          return PreservedAnalyses::all();
+        #else
+          return true;
+        #endif
     }
 
     // char *file_path = getenv("OSS_FUZZ_FILE_PATH");
@@ -149,7 +189,11 @@ PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MA
 
     if(issue == NULL || (file_url == NULL && ! instrFile.is_open())){
       errs() << "Insufficient information given for the instrumentation\n";
-      return PreservedAnalyses::all();
+      #if LLVM_VERSION_MAJOR >= 11  
+        return PreservedAnalyses::all();
+      #else
+        return true;
+      #endif
     }
 
 
@@ -167,7 +211,12 @@ PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MA
     }
     
     std::string line;
-    PreservedAnalyses ret;
+    #if LLVM_VERSION_MAJOR >= 11  
+        PreservedAnalyses ret;
+    #else
+        bool ret;
+    #endif
+    
     while(std::getline(instrFile,line)) {
       if(line.rfind(issue,0) == 0){
         std::string instr_line = line.substr(line.find(" ") + 1);

@@ -11,8 +11,15 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Passes/PassPlugin.h"
-#include "llvm/Passes/PassBuilder.h"
+
+#if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
+  #include "llvm/Passes/PassPlugin.h"
+  #include "llvm/Passes/PassBuilder.h"
+  #include "llvm/IR/PassManager.h"
+#else
+  #include "llvm/IR/LegacyPassManager.h"
+  #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#endif
 
 #include <fstream>
 #include <iostream>
@@ -31,10 +38,18 @@ using namespace llvm;
 
 namespace {
 
+#if LLVM_MAJOR >= 11  
 class PathCollection : public PassInfoMixin<PathCollection> {
   public:
     PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
     static bool isRequired() {return true;} 
+#else 
+  class PathCollection : public ModulePass {
+    public: 
+      static char ID;
+      PathCollection() : ModulePass(ID) {}
+      bool runOnModule(Module &M)
+#endif
   };
 }
 
@@ -57,7 +72,11 @@ std::vector<std::string>* split_string(std::string s,char delim) {
   return ret;
 }
 
-PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
+#if LLVM_VERSION_MAJOR >= 11  
+  PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
+#else
+  bool path_collection_instrument_line(Module &M, std::string line){
+#endif
   std::map<std::string, int> built_map;
   std::string matched;
 
@@ -99,9 +118,14 @@ PreservedAnalyses path_collection_instrument_line(Module &M, std::string line){
         }
       }
   }
-  return PreservedAnalyses::all();
+  #if LLVM_VERSION_MAJOR >= 11  
+        return PreservedAnalyses::all();
+  #else
+        return true;
+  #endif
 }
 
+#if LLVM_MAJOR >= 11
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {
 
@@ -126,12 +150,28 @@ llvmGetPassPluginInfo() {
           }};
 
 }
+#else
+char PathCollection::ID = 0;
+static RegisterPass<PathCollection>
+  X(/*PassArg=*/"PathCollection", /*Name=*/"PathCollection",/*CFGOnly=*/false, /*is_analysis=*/false);
 
-PreservedAnalyses PathCollection::run(Module &M, ModuleAnalysisManager &MAM) {
+#endif
+
+
+
+#if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
+  PreservedAnalyses PathCollection::run(Module &M, ModuleAnalysisManager &MAM){
+#else
+  bool PathCollection::runOnModule(Module &M){
+#endif
     char *instr_line = getenv("AFL_CODE_DUMP");
 
     if (instr_line == NULL){
+      #if LLVM_VERSION_MAJOR >= 11  
         return PreservedAnalyses::all();
+      #else
+        return true;
+      #endif
     }
 
     return path_collection_instrument_line(M,instr_line);
