@@ -48,7 +48,7 @@ class PathCollection : public PassInfoMixin<PathCollection> {
     public: 
       static char ID;
       PathCollection() : ModulePass(ID) {}
-      bool runOnModule(Module &M)
+      bool runOnModule(Module &M);
 #endif
   };
 }

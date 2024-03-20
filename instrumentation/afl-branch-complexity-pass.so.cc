@@ -49,7 +49,7 @@ class BranchComplexityPass : public ModulePass {
     public: 
       static char ID;
       BranchComplexityPass() : ModulePass(ID) {}
-      bool runOnModule(Module &M)
+      bool runOnModule(Module &M);
 #endif
   };
 }
