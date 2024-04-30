@@ -89,7 +89,9 @@ std::vector<std::string>* split_string(std::string s,char delim) {
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
             
-            errs() << "In  " << inst << " " + loc_s << "\n";
+            if (getenv("AFL_DEBUG")){
+              errs() << "In  " << inst << " " + loc_s << "\n";
+            }
             
             bool t = false;
           
