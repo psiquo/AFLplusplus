@@ -3019,7 +3019,7 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
     	load_llvm_pass(aflcc,"afl-path-collection-pass.so");
     }
     
-    if(getenv("OSS_FUZZ_BRANCH_COMPLEXITY") != NULL){
+    if(getenv("AFL_BRANCH_LINE") != NULL){
     	load_llvm_pass(aflcc,"afl-branch-complexity-pass.so");
     }
 

@@ -92,7 +92,7 @@ std::vector<std::string>* split_string(std::string s,char delim) {
             if (getenv("AFL_DEBUG")){
               errs() << "In  " << inst << " " + loc_s << "\n";
             }
-            
+
             bool t = false;
           
             for(std::string l : *split_string(line,'@')){
@@ -180,11 +180,9 @@ static RegisterStandardPasses RegisterBranchComplexityPass0(
 #else
   bool BranchComplexityPass::runOnModule(Module &M){
 #endif
-    char *issue = getenv("OSS_FUZZ_ISSUE");
-    char *file_url = getenv("OSS_FUZZ_URL");
-    char *enable = getenv("OSS_FUZZ_BRANCH_COMPLEXITY");
+    char *instr_line = getenv("AFL_BRANCH_LINE");
 
-    if (enable == NULL){
+    if (instr_line == NULL){
         #if LLVM_VERSION_MAJOR >= 11  
           return PreservedAnalyses::all();
         #else
@@ -192,54 +190,8 @@ static RegisterStandardPasses RegisterBranchComplexityPass0(
         #endif
     }
 
-    // char *file_path = getenv("OSS_FUZZ_FILE_PATH");
-
-    std::ifstream instrFile;
-
-    //errs() << "Given instrumentation path: " << file_path << "\n";
-    // errs() << "DIRLOC: ";
-    // system("pwd");
-    instrFile.open("instr_list.txt", std::ios::in);
-
-    if(issue == NULL || (file_url == NULL && ! instrFile.is_open())){
-      errs() << "Insufficient information given for the instrumentation\n";
-      #if LLVM_VERSION_MAJOR >= 11  
-        return PreservedAnalyses::all();
-      #else
-        return true;
-      #endif
-    }
-
-
-    if(!instrFile.is_open()){
-
-      pid_t pid = fork();
-
-      if(pid != 0){
-        waitpid(pid,NULL,0);
-      } else {
-        execl("/usr/bin/curl","curl","-o","instr_list.txt",file_url,NULL);
-      } 
-
-      instrFile.open("instr_list.txt", std::ios::in);
-    }
     
-    std::string line;
-    #if LLVM_VERSION_MAJOR >= 11  
-        PreservedAnalyses ret;
-    #else
-        bool ret;
-    #endif
-    
-    while(std::getline(instrFile,line)) {
-      if(line.rfind(issue,0) == 0){
-        std::string instr_line = line.substr(line.find(" ") + 1);
         //instr_line.erase(instr_line.find_last_not_of("\n"));
-        ret = branch_complexity_instrument_line(M,instr_line);
-      }
-    }
-
-    instrFile.close();
-    return ret;
+    return branch_complexity_instrument_line(M,instr_line);
 }
 
