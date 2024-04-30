@@ -89,7 +89,7 @@ std::vector<std::string>* split_string(std::string s,char delim) {
             std::string loc_s =  std::string(std::string(Loc->getDirectory())) + std::string("/") + std::string(Loc->getFilename().data()) 
                 + std::string(":") + std::to_string(Loc->getLine());
             
-            // errs() << "In  " << inst << " " + loc_s << "\n";
+            errs() << "In  " << inst << " " + loc_s << "\n";
             
             bool t = false;
           
@@ -155,9 +155,21 @@ llvmGetPassPluginInfo() {
 
 }
 #else
+static void registerBranchComplexityPass(const PassManagerBuilder &,
+                                     legacy::PassManagerBase &PM) {
+
+  PM.add(new BranchComplexityPass());
+}
+
 char BranchComplexityPass::ID = 0;
 static RegisterPass<BranchComplexityPass>
   X(/*PassArg=*/"BranchComplexityPass", /*Name=*/"BranchComplexityPass",/*CFGOnly=*/false, /*is_analysis=*/false);
+
+static RegisterStandardPasses RegisterBranchComplexityPass(
+    PassManagerBuilder::EP_OptimizerLast, registerBranchComplexityPass);
+
+static RegisterStandardPasses RegisterBranchComplexityPass0(
+    PassManagerBuilder::EP_EnabledOnOptLevel0, registerBranchComplexityPass);
 #endif
 
 //PreservedAnalyses BranchComplexityPass::run(Module &M, ModuleAnalysisManager &MAM) {

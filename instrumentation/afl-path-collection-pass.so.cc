@@ -151,9 +151,21 @@ llvmGetPassPluginInfo() {
 
 }
 #else
+static void registerPathCollectionPass(const PassManagerBuilder &,
+                                     legacy::PassManagerBase &PM) {
+
+  PM.add(new PathCollection());
+}
+
 char PathCollection::ID = 0;
 static RegisterPass<PathCollection>
   X(/*PassArg=*/"PathCollection", /*Name=*/"PathCollection",/*CFGOnly=*/false, /*is_analysis=*/false);
+
+static RegisterStandardPasses RegisterPathCollectionPass(
+    PassManagerBuilder::EP_OptimizerLast, registerPathCollectionPass);
+
+static RegisterStandardPasses RegisterPathCollectionPass0(
+    PassManagerBuilder::EP_EnabledOnOptLevel0, registerPathCollectionPass);
 
 #endif
 
