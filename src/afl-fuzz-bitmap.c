@@ -454,7 +454,7 @@ void write_crash_readme(afl_state_t *afl) {
 
 u8 __attribute__((hot))
 save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
-
+  //ACTF("AFL REACHED LINE: %d",afl->reached_line);
   if (unlikely(len == 0)) { return 0; }
 
   if (unlikely(fault == FSRV_RUN_TMOUT && afl->afl_env.afl_ignore_timeouts)) {
@@ -499,7 +499,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   }
 
-  if (likely(fault == afl->crash_mode)) {
+  if (likely(fault == afl->crash_mode) || (afl->tfb_mode && fault == FSRV_RUN_CRASH)) { //DAVIDE
 
     /* Keep only if there are new bits in the map, add to queue for
        future fuzzing, etc. */
@@ -516,15 +516,16 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
     }
 
-    if (likely(!new_bits)) {
+    if (likely(!new_bits) && !afl->reached_line) {
 
-      if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
+      if (unlikely(afl->crash_mode) || (afl->tfb_mode && fault == FSRV_RUN_CRASH)) { ++afl->total_crashes; }
       return 0;
 
     }
 
   save_to_queue:
 
+  //ACTF("SAVING TO QUEUE"); //DAVIDE
 #ifndef SIMPLE_FILES
 
     queue_fn =

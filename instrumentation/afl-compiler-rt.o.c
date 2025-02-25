@@ -1641,12 +1641,16 @@ void __dump_path_collection(void){
 
   const char * path_cstr = list_to_string(paths);
   //printf("%s\n",path_cstr);
-
-  MD5_Init(&c);
-  MD5_Update(&c,path_cstr,strlen(path_cstr));
-  MD5_Final(digest,&c);
-  for(int i = 0; i < MD5_DIGEST_LENGTH; i++){
-      fprintf(fptr,"%02x",digest[i]);
+  if(getenv("CLEAR_TRACE") != NULL){
+    fprintf(fptr,"%s\n",path_cstr);
+  } else {
+    MD5_Init(&c);
+    MD5_Update(&c,path_cstr,strlen(path_cstr));
+    MD5_Final(digest,&c);
+    
+    for(int i = 0; i < MD5_DIGEST_LENGTH; i++){
+        fprintf(fptr,"%02x",digest[i]);
+    }
   }
   fflush(fptr);
   fclose(fptr);

@@ -520,11 +520,12 @@ int main(int argc, char **argv_orig, char **envp) {
 
   if (get_afl_env("AFL_DEBUG")) { debug = afl->debug = 1; }
 
+
   afl_state_init(afl, map_size);
   afl->debug = debug;
   afl_fsrv_init(&afl->fsrv);
   if (debug) { afl->fsrv.debug = true; }
-  read_afl_environment(afl, envp);
+  read_afl_environment(afl, envp); 
   if (afl->shm.map_size) { afl->fsrv.map_size = afl->shm.map_size; }
   exit_1 = !!afl->afl_env.afl_bench_just_one;
 
@@ -1363,6 +1364,22 @@ int main(int argc, char **argv_orig, char **envp) {
     }
 
   }
+
+  //afl->tfb_mode = afl->crash_mode = 0;
+
+  if(get_afl_env("AFL_TFB_MODE")) { 
+    if(afl->crash_mode != FSRV_RUN_CRASH){
+      ACTF("ENABLING TFB MODE\n"); 
+      afl->tfb_mode = 1;
+      afl->reached_line = 0;
+    } else {
+      ACTF("ENABLING TFB CRASH\n"); 
+      afl->tfb_crash = 1;
+    }
+    DEBUGF("AFL TFB MODE: %d\nAFL TFB CRASH: %d\n",afl->tfb_mode,afl->tfb_crash);
+  } //DAVIDE
+  
+  
 
   if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
 

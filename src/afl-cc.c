@@ -1892,6 +1892,7 @@ void add_native_pcguard(aflcc_state_t *aflcc) {
         "pcguard instrumentation with pc-table requires LLVM 6.0.1+"
         " otherwise the compiler will fail");
   #endif
+    WARNF("USING trace-pc-guard bb");
     insert_param(aflcc,
                  "-fsanitize-coverage=trace-pc-guard,bb,no-prune,pc-table");
 #endif
@@ -3015,7 +3016,11 @@ static void edit_params(aflcc_state_t *aflcc, u32 argc, char **argv,
     insert_param(aflcc,"-lssl");
 
     if(getenv("AFL_CODE_DUMP") != NULL){
-    	insert_param(aflcc,"-fsanitize-coverage=bb,no-prune,pc-table,trace-pc-guard");
+	if(getenv("AFL_CLEAR_TRACE") != NULL){
+    		insert_param(aflcc,"-fsanitize-coverage=edge,no-prune,pc-table,trace-pc-guard");
+	} else {
+    		insert_param(aflcc,"-fsanitize-coverage=bb,no-prune,pc-table,trace-pc-guard");
+	}
     	load_llvm_pass(aflcc,"afl-path-collection-pass.so");
     }
     

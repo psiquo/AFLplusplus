@@ -66,7 +66,7 @@ unsigned int crash_hash_func(char *s){
   return hash % CRASH_HASH_SIZE;
 }
 
-void copy_file(char * source,  char * dest){
+void copy_file(char * source,  char * dest, u64 elapsed, char * trace){
   
   unsigned char buf[4096] = {};
   size_t bytes;
@@ -74,7 +74,7 @@ void copy_file(char * source,  char * dest){
   //printf("%s %s\n",source,dest);
   FILE *sf,*df;
   sf = fopen(source,"rb");
-  df = fopen(dest,"wb");
+  df = fopen(dest,"ab");
   
   if(df == NULL || sf == NULL){
     printf("Cannot open files:\n%s: %p\n%s: %p\n",source,sf,dest,df);
@@ -90,10 +90,14 @@ void copy_file(char * source,  char * dest){
     return;
   }
 
+  fprintf(df,"#### INPUT ####\n");
+  fprintf(df,"---- TRACE ----\n%s\n---- BYTES ----\n",trace);
+
   while((bytes = fread(buf,sizeof *buf, 1024,sf)) > 0){
     fwrite(buf,sizeof *buf, bytes,df);
   }
   
+  fprintf(df,"\n---- COUNT ----\n%llu\n",elapsed);
   fclose(sf);
   fclose(df);
 }
@@ -138,6 +142,7 @@ crash_info_block_t * get_crash_info_block(crash_info_head_t **hashmap, unsigned 
 fsrv_run_result_t __attribute__((hot))
 fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 
+  afl->reached_line = 0;
 #ifdef PROFILING
   static u64      time_spent_start = 0;
   struct timespec spec;
@@ -182,26 +187,6 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
     });
 
   }
-  #ifdef DAVIDE_SAVE_FIRST_CRASH
-  static u8 crashed = 0;
-  
-  if(getenv("AFL_SAVE_FIRST_CRASH") && !crashed && res == FSRV_RUN_CRASH){
-    printf("SAVING CRASH\n");
-    crashed = 1;
-
-    u64 current, elapsed;
-    clock_gettime(CLOCK_REALTIME, &spec2);
-    current = (spec2.tv_sec * 1000000000) + spec2.tv_nsec;
-    elapsed = (current - beginning);
-
-    u8  fn[PATH_MAX];
-
-    snprintf(fn,PATH_MAX,"%s/first_crash_time",afl->out_dir);
-    FILE *elapsed_first_crash_f = fopen(fn,"w");
-
-    fprintf(elapsed_first_crash_f,"%lld\n%llu",elapsed,fsrv->total_execs);
-  }
-  #endif
 
   #ifdef DAVIDE_CUSTOM_TRACE
 
@@ -223,10 +208,60 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
 	  return res;
   }
 
+  afl->reached_line = 1; //If trace is not null we reached the code line
+
+  #ifdef DAVIDE_SAVE_FIRST_CRASH
+  static u8 crashed = 0;
+  static u8 reached = 0;
+
+  if(getenv("AFL_SAVE_FIRST_CRASH") && reached == 1 && crashed == 1){
+    printf("Vuln reached and crashed, exiting\n");
+    exit(0);
+  }
+  if(getenv("AFL_SAVE_FIRST_CRASH") && !crashed && res == FSRV_RUN_CRASH){
+    printf("SAVING CRASH\n");
+    crashed = 1;
+
+    u64 current, elapsed;
+    clock_gettime(CLOCK_REALTIME, &spec2);
+    current = (spec2.tv_sec * 1000000000) + spec2.tv_nsec;
+    elapsed = (current - beginning);
+
+    u8  fn[PATH_MAX];
+
+    snprintf(fn,PATH_MAX,"%s/first_crash_time",afl->out_dir);
+    FILE *elapsed_first_crash_f = fopen(fn,"w");
+
+    fprintf(elapsed_first_crash_f,"%lld\n%llu\n",elapsed,fsrv->total_execs);
+
+    fclose(elapsed_first_crash_f);
+
+  } else if(getenv("AFL_SAVE_FIRST_CRASH") && !reached && res == FSRV_RUN_OK){
+    printf("SAVING CRASH\n");
+    reached = 1;
+
+    u64 current, elapsed;
+    clock_gettime(CLOCK_REALTIME, &spec2);
+    current = (spec2.tv_sec * 1000000000) + spec2.tv_nsec;
+    elapsed = (current - beginning);
+
+    u8  fn[PATH_MAX];
+
+    snprintf(fn,PATH_MAX,"%s/first_reach_time",afl->out_dir);
+    FILE *elapsed_first_reach_f = fopen(fn,"w");
+
+    fprintf(elapsed_first_reach_f,"%lld\n%llu\n",elapsed,fsrv->total_execs);
+
+    fclose(elapsed_first_reach_f);
+  }
+  #endif
+
   unsigned char trace[ 2 * MD5_DIGEST_LENGTH + 1] = {0};
   fread(trace,sizeof(char),2*MD5_DIGEST_LENGTH,trace_file);
   fclose(trace_file);
-  remove(filename);
+  if (remove(filename) != 0)
+    printf("Could not remove %s\n",filename);
+
   //printf("Trace: %s %s %c\n",trace, res == FSRV_RUN_CRASH ? "CRASH" : "NOCRASH",trace[20]);
   if(strlen(trace) == 0)
     return res;
@@ -300,19 +335,19 @@ fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout) {
     base = ncrash_dir;
   }
 
-  sprintf(outfile_t,"%s/",base);
+  sprintf(outfile_t,"%s/inputs",base);
 
- 
+  /*
   for(int i = 0; i < 2 * MD5_DIGEST_LENGTH; i++ ){
     sprintf(outfile_t + base_size + i,"%c",trace[i]);
   }
 
   //sprintf(outfile_i + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
-  sprintf(outfile_t + base_size + 2 * MD5_DIGEST_LENGTH,"_input");
-
+  sprintf(outfile_t + base_size + 2 * MD5_DIGEST_LENGTH,"_%llu_input",fsrv->total_execs);
+  */
   //copy_file(afl->fsrv.out_file,outfile_i);
   //printf("%s\n",outfile_t);
-  copy_file(afl->fsrv.out_file,outfile_t);
+  copy_file(afl->fsrv.out_file,outfile_t,fsrv->total_execs, trace);
 
 
  #endif
@@ -704,7 +739,8 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
 
-    if (afl->stop_soon || fault != afl->crash_mode) { goto abort_calibration; }
+    //DAVIDE
+    if (afl->stop_soon || (fault != afl->crash_mode && !(afl->tfb_mode && fault == FSRV_RUN_CRASH) && !(afl->tfb_crash && fault == FSRV_RUN_OK))) { DEBUGF("ABORT CALIB\n"); goto abort_calibration; } //DAVIDE
 
     if (!afl->non_instrumented_mode && !afl->stage_cur &&
         !count_bytes(afl, afl->fsrv.trace_bits)) {
@@ -747,7 +783,7 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
 
-    if (afl->stop_soon || fault != afl->crash_mode) { goto abort_calibration; }
+    if (afl->stop_soon || (fault != afl->crash_mode && !(afl->tfb_mode && fault == FSRV_RUN_CRASH) &&!(afl->tfb_crash && fault == FSRV_RUN_OK) )) {DEBUGF("ABORT CALIB\n"); goto abort_calibration; } //DAVIDE
 
     if (!afl->non_instrumented_mode && !afl->stage_cur &&
         !count_bytes(afl, afl->fsrv.trace_bits)) {
